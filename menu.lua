@@ -11,7 +11,6 @@ mon.clear()
 -- ==========================================
 -- ADVANCED CC:TWEAKED PALETTE INJECTION
 -- ==========================================
--- Overwriting default color channels with sleek, custom modern hex codes
 if mon.isColor() then
     mon.setPaletteColor(colors.orange,    0xD97706) -- Modern Rich Amber
     mon.setPaletteColor(colors.gray,      0x4B5563) -- High-Tech Slate Steel
@@ -100,12 +99,12 @@ local function runBootAnimation()
     for line = 1, h do
         mon.setTextColor(colors.lime)
         mon.setCursorPos(math.random(1, w), line)
-        mon.write(string.char(math.random(33, 126)))
+        mon.write("#") -- Fixed font character for matrix rain
         if line == math.floor(h/2) then
             mon.setCursorPos(math.floor((w - 24)/2), line)
             mon.setBackgroundColor(colors.gray)
             mon.setTextColor(colors.white)
-            mon.write(" ┌── CORE OS ONLINE ──┐ ")
+            mon.write(" [=== CORE OS ONLINE ===] ")
             mon.setBackgroundColor(colors.black)
         end
         os.sleep(0.04)
@@ -157,7 +156,6 @@ local function registerHitbox(x1, x2, y1, y2, callback)
     table.insert(hitboxes, { x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback })
 end
 
--- ADVANCED DRAWING ENGINE: Renders rounded corners and flat styling
 local function drawSleekButton(x, y, width, height, text, mainColor, textColor, hasShadow)
     if hasShadow then
         mon.setBackgroundColor(colors.black)
@@ -174,23 +172,21 @@ local function drawSleekButton(x, y, width, height, text, mainColor, textColor, 
         mon.write(string.rep(" ", width))
     end
     
-    -- Draw clean flat outline panels inside buttons
     mon.setCursorPos(x + math.floor((width - #text) / 2), y + math.floor(height / 2))
     mon.write(text)
 end
 
--- ADVANCED DRAWING ENGINE: Generates a beautiful box-character loading bar
+-- FIXED PROGRESS BAR: Uses safe standard characters (= and -) for the loading bar meter
 local function drawProgressBar(x, y, width, percent)
     local numBlocks = math.floor((percent / 100) * width)
     mon.setCursorPos(x, y)
     mon.setBackgroundColor(colors.black)
     
-    -- Determine color grade based on inventory weight
     if percent >= 85 then mon.setTextColor(colors.red)
     elseif percent >= 60 then mon.setTextColor(colors.orange)
     else mon.setTextColor(colors.lime) end
     
-    local barStr = string.rep("█", numBlocks) .. string.rep("░", width - numBlocks)
+    local barStr = "[" .. string.rep("=", numBlocks) .. string.rep("-", width - numBlocks) .. "]"
     mon.write(barStr .. string.format(" %3d%%", percent))
 end
 
@@ -200,13 +196,12 @@ local function drawMainPage()
     hitboxes = {}
     local w, h = mon.getSize()
     
-    -- Top Industrial Header Bar
     mon.setBackgroundColor(colors.gray)
     mon.setCursorPos(1, 1)
     mon.write(string.rep(" ", w))
     mon.setTextColor(colors.white)
-    mon.setCursorPos(math.floor((w - 24) / 2) + 1, 1)
-    mon.write("─── FACTORY NETWORK ───")
+    mon.setCursorPos(math.floor((w - 22) / 2) + 1, 1)
+    mon.write("=== FACTORY NETWORK ===")
     
     local currentY = 3
     for _, mach in ipairs(network) do
@@ -235,31 +230,28 @@ local function drawSubPage(machName)
     end
     if not selectedMach then return end
     
-    -- Full Span System Accent Bar
     mon.setBackgroundColor(selectedMach.themeColor)
     mon.setCursorPos(1, 1)
     mon.write(string.rep(" ", w))
     
-    -- Premium Minimalist Navigation Toggle
-    drawSleekButton(1, 1, 6, 1, " ◄── ", colors.lightGray, colors.black, false)
+    drawSleekButton(1, 1, 6, 1, " BACK ", colors.lightGray, colors.black, false)
     registerHitbox(1, 6, 1, 1, function() 
         playSound("nav")
         currentPage = "MAIN" 
     end)
     
     mon.setTextColor(colors.white)
-    mon.setCursorPos(9, 1)
+    mon.setCursorPos(8, 1)
     mon.write(selectedMach.machineName:upper() .. " CONTROL")
     
-    -- Call the smooth box graphic progress loading bar
-    drawProgressBar(w - 14, 1, 8, selectedMach.chestPercent)
+    drawProgressBar(w - 15, 1, 7, selectedMach.chestPercent)
     
     local currentY = 4
     if selectedMach.warning then
         mon.setBackgroundColor(colors.black)
         mon.setTextColor(colors.red)
         mon.setCursorPos(math.floor((w - (#selectedMach.warning + 4)) / 2) + 1, 3)
-        mon.write("⚠ " .. selectedMach.warning .. " ⚠")
+        mon.write("!! " .. selectedMach.warning .. " !!")
         currentY = 4
     end
     
@@ -268,15 +260,14 @@ local function drawSubPage(machName)
         local btnColor = block.active and colors.lime or colors.red
         local textColor = block.active and colors.black or colors.white
         
-        -- Interactive Panel Buttons
-        local displayLabel = block.active and "▢ ACTIVE" or "▧ OFFLINE"
+        -- Safe standard labels instead of unicode checkboxes
+        local displayLabel = block.active and "ACTIVE" or "OFFLINE"
         drawSleekButton(2, currentY, btnWidth, 3, displayLabel, btnColor, textColor, true)
         
-        -- High Tech Monospace Formatting for Text Labels
         mon.setBackgroundColor(colors.black)
         mon.setTextColor(selectedMach.themeColor)
         mon.setCursorPos(18, currentY)
-        mon.write("► " .. block.name:upper())
+        mon.write(block.name:upper()) -- Removed the arrow token here
         
         mon.setTextColor(colors.lightGray)
         mon.setCursorPos(18, currentY + 1)
@@ -309,7 +300,7 @@ local function render()
     if currentPage == "MAIN" then drawMainPage() else drawSubPage(currentPage) end
 end
 
--- Init Cycles
+-- Init
 runBootAnimation()
 loadStates()
 render()
@@ -346,25 +337,3 @@ while true do
                     end
                 end
             end
-            
-        elseif type(message) == "string" and string.sub(message, 1, 13) == "CHEST_STATUS:" then
-            local parts = {}
-            for match in string.gmatch(message, "[^:]+") do
-                table.insert(parts, match)
-            end
-            
-            local targetName = parts[2]
-            local incomingPct = tonumber(parts[3]) or 0
-            
-            for _, mach in ipairs(network) do
-                if mach.machineName == targetName then
-                    if mach.chestPercent ~= incomingPct then
-                        mach.chestPercent = incomingPct
-                        render() 
-                    end
-                    break
-                end
-            end
-        end
-    end
-end
