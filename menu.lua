@@ -8,12 +8,12 @@ if not modem then print("Error: No modem!") return end
 mon.setTextScale(1)
 mon.clear()
 
--- MASTER DATABASE OF ALL UNEARTHER MACHINES
+-- MASTER DATABASE
 local network = {
     {
         machineName = "Archaeologist",
         themeColor = colors.orange,
-        chestPercent = 0, -- Track live capacity %
+        chestPercent = 0, 
         blocks = {
             { name = "Dirt Mode",  channel = 101, active = false, info1 = "Magic Saplings, Pebbles,", info2 = "Seeds" },
             { name = "Sand Mode",  channel = 102, active = false, info1 = "Clay, Copper, Silver,", info2 = "Nickel, Uranium" },
@@ -46,7 +46,7 @@ local currentPage = "MAIN"
 local hitboxes = {}
 local SAVE_FILE = "/button_states.txt"
 
--- Open all channels
+-- Open channels
 for _, mach in ipairs(network) do
     for _, block in ipairs(mach.blocks) do
         modem.open(block.channel)
@@ -54,11 +54,11 @@ for _, mach in ipairs(network) do
 end
 
 -- ==========================================
--- FIXED AUDIO ENGINE (Vanilla Standard Sound IDs)
+-- AUDIO ENGINE
 -- ==========================================
 local function playSound(soundType)
     if not speaker then return end
-    pcall(function() -- Safe-guard to prevent any sound errors from ever freezing the UI
+    pcall(function()
         if soundType == "click" then
             speaker.playNote("harp", 1.0, 12)
         elseif soundType == "nav" then
@@ -82,14 +82,11 @@ local function runBootAnimation()
     mon.setBackgroundColor(colors.black)
     mon.clear()
     local w, h = mon.getSize()
-    
     playSound("boot")
-    
     for line = 1, h do
         mon.setTextColor(colors.green)
         mon.setCursorPos(math.random(1, w), line)
         mon.write(string.char(math.random(33, 126)))
-        
         if line == math.floor(h/2) then
             mon.setCursorPos(math.floor((w - 18)/2), line)
             mon.setBackgroundColor(colors.gray)
@@ -213,13 +210,12 @@ local function drawSubPage(machName)
         currentPage = "MAIN" 
     end)
     
-    -- Centered Title Box
     mon.setTextColor(colors.white)
     local titleText = selectedMach.machineName:upper()
     mon.setCursorPos(11, 1)
     mon.write(titleText)
     
-    -- NEW: Inline Live Chest Inventory Metric
+    -- Live Chest Capacity Display
     mon.setCursorPos(w - 14, 1)
     local pct = selectedMach.chestPercent
     if pct >= 85 then mon.setTextColor(colors.red)
@@ -262,7 +258,6 @@ local function drawSubPage(machName)
         
         registerHitbox(2, 2 + btnWidth - 1, currentY, currentY + 2, function()
             playSound("click")
-            
             if not block.active then
                 for _, b in ipairs(selectedMach.blocks) do
                     if b.active then
@@ -276,7 +271,6 @@ local function drawSubPage(machName)
                 block.active = false
                 modem.transmit(block.channel, block.channel, "OFF")
             end
-            
             saveStates()
         end)
         currentY = currentY + 4
@@ -293,7 +287,7 @@ loadStates()
 render()
 
 -- ==========================================
--- EVENT HANDLING SYSTEM
+-- MAIN SYSTEM EVENT HANDLER
 -- ==========================================
 while true do
     local event, p1, p2, p3, p4, p5 = os.pullEvent()
@@ -309,12 +303,12 @@ while true do
         end
         
     elseif event == "modem_message" then
-        local channel, message = p2, p4
+        local listenChannel, senderChannel, message = p1, p2, p3 -- Adjusted event parsing safely
         
         if message == "CHEST_FULL" then
             for _, mach in ipairs(network) do
                 for _, block in ipairs(mach.blocks) do
-                    if block.channel == channel and block.active then
+                    if block.channel == listenChannel and block.active then
                         block.active = false
                         mach.chestPercent = 100
                         playSound("warning")
@@ -324,20 +318,25 @@ while true do
                 end
             end
             
-        -- NEW: Parse live updates transmitted by floor computer
+        -- Robust String Parsing for Named Chest Metric Logs
         elseif type(message) == "string" and string.sub(message, 1, 13) == "CHEST_STATUS:" then
-            local incomingPct = tonumber(string.sub(message, 14)) or 0
+            -- Slice out name and percent value
+            local parts = {}
+            for match in string.gmatch(message, "[^:]+") do
+                table.insert(parts, match)
+            end
             
-            -- Find the machine group that owns this channel and update its tracking variable
+            local targetName = parts[2]
+            local incomingPct = tonumber(parts[3]) or 0
+            
+            -- Match directly against the precise machine name string!
             for _, mach in ipairs(network) do
-                for _, block in ipairs(mach.blocks) do
-                    if block.channel == channel then
-                        if mach.chestPercent ~= incomingPct then
-                            mach.chestPercent = incomingPct
-                            render() -- Live refresh the monitor screen automatically!
-                        end
-                        break
+                if mach.machineName == targetName then
+                    if mach.chestPercent ~= incomingPct then
+                        mach.chestPercent = incomingPct
+                        render() -- Instant visual push update!
                     end
+                    break
                 end
             end
         end
