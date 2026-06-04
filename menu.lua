@@ -21,7 +21,7 @@ local network = {
         }
     },
     {
-        machineName = "Geologist (WIP)",
+        machineName = "Geologist",
         themeColor = colors.gray,
         chestPercent = 0,
         blocks = {
@@ -30,7 +30,7 @@ local network = {
         }
     },
     {
-        machineName = "Dimensional (WIP)",
+        machineName = "Dimensionalist",
         themeColor = colors.purple,
         warning = "MANUAL REFILL REQUIRED!",
         chestPercent = 0,
