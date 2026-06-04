@@ -1,12 +1,12 @@
--- GEOLOGIST RECEIVER: SOUL SAND MODE (Channel 106)
-local MY_CHANNEL = 106
+-- GEOLOGIST RECEIVER: SOUL SAND MODE (Channel 110)
+local MY_CHANNEL = 110
 
 local modem = peripheral.find("modem") or error("No wireless/ender modem found!")
 modem.open(MY_CHANNEL)
 
 print("----------------------------------------")
 print(" SYSTEM: GEOLOGIST RECEIVER")
-print(" MODE: SOUL SAND CONTROL (CH 106)")
+print(" MODE: SOUL SAND CONTROL (CH 110)")
 print("----------------------------------------")
 
 while true do
@@ -14,7 +14,7 @@ while true do
     
     if channel == MY_CHANNEL then
         if message == "ON" then
-            redstone.setOutput("back", true) -- Adjust "back" to whichever side faces your machine input
+            redstone.setOutput("back", true)
             print("[STATUS] Unearther Active: Soul Sand Mode")
         elseif message == "OFF" then
             redstone.setOutput("back", false)
