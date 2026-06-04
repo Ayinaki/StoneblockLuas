@@ -1,11 +1,12 @@
 -- STANDALONE WIRELESS VILLAGER CHEST MONITOR
+local VILLAGER_NAME = "Archaeologist" -- Explicitly tags who this chest belongs to
 local CHANNELS_TO_PROTECT = { 101, 102, 103 }
 local CHEST_SIDE = "top" 
 
 local modem = peripheral.find("modem") or error("No wireless/ender modem found!")
 print("----------------------------------------")
 print(" SYSTEM: SHARED VILLAGER CHEST MONITOR")
-print(" LIVE METRICS BROADCASTING ACTIVE")
+print(" TARGETING: " .. VILLAGER_NAME)
 print("----------------------------------------")
 
 while true do
@@ -15,19 +16,16 @@ while true do
         local occupiedSlotsList = chest.list()
         
         local filledSlots = 0
-        for _ in pairs(occupiedSlotsList) do
-            filledSlots = filledSlots + 1
-        end
+        for _ in pairs(occupiedSlotsList) do filledSlots = filledSlots + 1 end
         
         local fullPercent = math.floor((filledSlots / totalSlots) * 100)
         print(string.format("Shared Chest Space: %d%% occupied", fullPercent))
         
-        -- Broadcast live metrics string to the main station on the active frequencies
+        -- Send a robust string containing the name AND percentage
         for _, channel in ipairs(CHANNELS_TO_PROTECT) do
-            modem.transmit(channel, channel, "CHEST_STATUS:" .. tostring(fullPercent))
+            modem.transmit(channel, channel, "CHEST_STATUS:" .. VILLAGER_NAME .. ":" .. tostring(fullPercent))
         end
         
-        -- Trigger emergency kill safeguards if full
         if fullPercent >= 95 then
             print("[WARNING] Shared chest full! Sending emergency stops...")
             for _, channel in ipairs(CHANNELS_TO_PROTECT) do
