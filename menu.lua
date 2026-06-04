@@ -26,7 +26,8 @@ local network = {
         chestPercent = 0,
         blocks = {
             { name = "Gravel Mode", channel = 104, active = false, info1 = "Coal, Diamond, Emerald, Lapis, Osmium,", info2 = "Iron, Zinc, Lead, Aluminum" },
-            { name = "Cobble Mode", channel = 105, active = false, info1 = "Stoneium", info2 = "" }
+            { name = "Cobble Mode", channel = 105, active = false, info1 = "Stoneium", info2 = "" },
+            { name = "SoulSand Mode", channel = 106, active = false, info1 = "Nether Quartz, Black Quartz,", info2 = "Glowstone Dust" }
         }
     },
     {
@@ -35,9 +36,9 @@ local network = {
         warning = "MANUAL REFILL REQUIRED!",
         chestPercent = 0,
         blocks = {
-            { name = "Otherrock",   channel = 106, active = false, info1 = "Replica,", info2 = "Certus Quartz Dust" },
-            { name = "Netherrack",  channel = 107, active = false, info1 = "Sulfur, Blaze Powder, Iesnium,", info2 = "Netherite Scrap" },
-            { name = "End Stone",   channel = 108, active = false, info1 = "Fluorite, Platinum,", info2 = "Draconium, Dim Shard" }
+            { name = "Otherrock",   channel = 107, active = false, info1 = "Replica,", info2 = "Certus Quartz Dust" },
+            { name = "Netherrack",  channel = 108, active = false, info1 = "Sulfur, Blaze Powder, Iesnium,", info2 = "Netherite Scrap" },
+            { name = "End Stone",   channel = 109, active = false, info1 = "Fluorite, Platinum,", info2 = "Draconium, Dim Shard" }
         }
     }
 }
@@ -336,7 +337,7 @@ while true do
                 if mach.machineName == targetName then
                     if mach.chestPercent ~= incomingPct then
                         mach.chestPercent = incomingPct
-                        render() -- Instant visual push update
+                        render() 
                     end
                     break
                 end
