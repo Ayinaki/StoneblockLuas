@@ -7,8 +7,7 @@ if not modem then print("Error: No modem!") return end
 mon.setTextScale(1)
 mon.clear()
 
--- MASTER DATABASE OF ALL UNEARTHER MACHINES
--- Descriptions have been fully spelled out and formatted for cleaner UI
+-- MASTER DATABASE
 local network = {
     {
         machineName = "Archaeologist",
@@ -29,6 +28,57 @@ local network = {
 
 local currentPage = "MAIN" 
 local hitboxes = {}
+
+-- ==========================================
+-- PERSISTENCE ENGINE (Save/Load Logic)
+-- ==========================================
+local SAVE_FILE = "button_states.txt"
+
+local function saveStates()
+    local file = fs.open(SAVE_FILE, "w")
+    for _, mach in ipairs(network) do
+        for _, block in ipairs(mach.blocks) do
+            -- Save each channel number and its true/false state
+            file.writeLine(block.channel .. ":" .. tostring(block.active))
+        end
+    end
+    file.close()
+end
+
+local function loadStates()
+    if not fs.exists(SAVE_FILE) then return end
+    
+    local file = fs.open(SAVE_FILE, "r")
+    local line = file.readLine()
+    
+    -- Read the file line by line
+    while line do
+        -- Split the line at the colon (e.g., "101:true")
+        local parts = {}
+        for match in string.gmatch(line, "[^:]+") do
+            table.insert(parts, match)
+        end
+        
+        local channel = tonumber(parts[1])
+        local active = (parts[2] == "true")
+        
+        -- Find the matching channel in our network and restore it
+        for _, mach in ipairs(network) do
+            for _, block in ipairs(mach.blocks) do
+                if block.channel == channel then
+                    block.active = active
+                    -- Instantly broadcast the signal so receivers catch it on startup!
+                    local signal = active and "ON" or "OFF"
+                    modem.transmit(channel, channel, signal)
+                end
+            end
+        end
+        
+        line = file.readLine()
+    end
+    file.close()
+end
+-- ==========================================
 
 local function registerHitbox(x1, x2, y1, y2, callback)
     table.insert(hitboxes, { x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback })
@@ -95,16 +145,12 @@ local function drawSubPage(machName)
         local btnWidth = 14
         local btnColor = block.active and colors.green or colors.red
         
-        -- Interactive toggle box
         drawButton(2, currentY, btnWidth, 3, block.name, btnColor, colors.white)
         
-        -- Two-line stacked description to keep things super tidy
         mon.setBackgroundColor(colors.black)
         mon.setTextColor(colors.lightGray)
-        
         mon.setCursorPos(18, currentY + 0)
         mon.write(block.info1)
-        
         mon.setCursorPos(18, currentY + 1)
         mon.write(block.info2)
         
@@ -112,6 +158,9 @@ local function drawSubPage(machName)
             block.active = not block.active
             local signal = block.active and "ON" or "OFF"
             modem.transmit(block.channel, block.channel, signal)
+            
+            -- SAVE STATES ON CLICK
+            saveStates()
         end)
         
         currentY = currentY + 4
@@ -126,6 +175,8 @@ local function render()
     end
 end
 
+-- LOAD CACHED STATES AND RE-BROADCAST ON BOOT
+loadStates()
 render()
 
 while true do
