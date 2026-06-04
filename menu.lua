@@ -22,7 +22,7 @@ if mon.isColor() then
     mon.setPaletteColor(colors.yellow,    0xFBBF24)
 end
 
--- MASTER DATABASE
+-- MASTER DATABASE (CHANNELS FIXED TO PREVENT COLLISIONS)
 local network = {
     {
         machineName = "Archaeologist",
@@ -43,8 +43,8 @@ local network = {
         chestPercent = 0,
         blocks = {
             { name = "Gravel Mode",   channel = 104, active = false, info1 = "Coal, Diamond, Emerald, Lapis,", info2 = "Iron, Zinc, Lead, Aluminum" },
-            { name = "Cobble Mode",   channel = 105, active = false, info1 = "Stoneium",                       info2 = "" },
-            { name = "SoulSand Mode", channel = 106, active = false, info1 = "Nether Quartz, Black Quartz,",   info2 = "Glowstone Dust" }
+            { name = "Cobble Mode",   channel = 105, active = false, info1 = "Stoneium",                        info2 = "" },
+            { name = "SoulSand Mode", channel = 110, active = false, info1 = "Nether Quartz, Black Quartz,",   info2 = "Glowstone Dust" } -- Fixed to 110
         }
     },
     {
@@ -54,9 +54,9 @@ local network = {
         warning = "MANUAL REFILL REQUIRED!",
         chestPercent = 0,
         blocks = {
-            { name = "Otherrock",  channel = 107, active = false, info1 = "Replica,",                    info2 = "Certus Quartz Dust" },
-            { name = "Netherrack", channel = 108, active = false, info1 = "Sulfur, Blaze Powder, Iesnium,", info2 = "Netherite Scrap" },
-            { name = "End Stone",  channel = 109, active = false, info1 = "Fluorite, Platinum,",         info2 = "Draconium, Dim Shard" }
+            { name = "Otherrock",  channel = 106, active = false, info1 = "Replica,",                    info2 = "Certus Quartz Dust" }, -- Safely on 106
+            { name = "Netherrack", channel = 107, active = false, info1 = "Sulfur, Blaze Powder, Iesnium,", info2 = "Netherite Scrap" },   -- Safely on 107
+            { name = "End Stone",  channel = 108, active = false, info1 = "Fluorite, Platinum,",         info2 = "Draconium, Dim Shard" }  -- Safely on 108
         }
     }
 }
@@ -186,12 +186,10 @@ local function drawButton(x, y, width, height, text, mainColor, textColor, hasSh
     local tx = x + math.max(0, math.floor((width - #text) / 2))
     local ty = y + math.floor(height / 2)
     writeAt(tx, ty, text, textColor, mainColor)
-    -- restore
     mon.setBackgroundColor(colors.black)
     mon.setTextColor(colors.white)
 end
 
--- Solid colour-block progress bar — no special characters
 local function drawProgressBar(x, y, width, percent)
     local filled = math.floor((percent / 100) * width)
     local empty  = width - filled
@@ -207,11 +205,9 @@ local function drawProgressBar(x, y, width, percent)
     mon.setBackgroundColor(colors.gray)
     mon.setTextColor(colors.white)
     if empty > 0 then mon.write(string.rep(" ", empty)) end
-    -- percent label
     mon.setBackgroundColor(colors.black)
     mon.setTextColor(barColor)
     mon.write(" " .. tostring(math.floor(percent)) .. "%")
-    -- restore
     mon.setBackgroundColor(colors.black)
     mon.setTextColor(colors.white)
 end
@@ -225,14 +221,11 @@ local function drawMainPage()
     hitboxes = {}
     local w, h = mon.getSize()
 
-    -- Two-tone header: dark side strips + bright centre title
     fill(1, 1, w, 2, colors.gray)
     local title = "FACTORY NETWORK"
     local tx = math.max(1, math.floor((w - #title) / 2) + 1)
-    -- accent bar on row 1
     fill(1, 1, w, 1, colors.lightGray)
     writeAt(tx - 2, 1, "\x10 " .. title .. " \x11", colors.black, colors.lightGray)
-    -- subtitle bar on row 2
     writeAt(math.max(1, math.floor((w - 18) / 2) + 1), 2, "UNEARTHING CONTROL", colors.gray, colors.black)
 
     local currentY = 4
@@ -242,7 +235,6 @@ local function drawMainPage()
 
         drawButton(startX, currentY, btnWidth, 3, (mach.icon or "\7") .. " " .. mach.machineName:upper(), mach.themeColor, colors.white, true)
 
-        -- connector dot between buttons
         if i < #network then
             writeAt(math.floor(w / 2), currentY + 3, "+", colors.lightGray, colors.black)
         end
@@ -272,41 +264,34 @@ local function drawSubPage(machName)
     if not selectedMach then return end
 
     local tc = selectedMach.themeColor
-
-    -- Header: full-width theme colour bar
     fill(1, 1, w, 1, tc)
 
-    -- BACK button
     drawButton(1, 1, 6, 1, "BACK", colors.lightGray, colors.black, false)
     registerHitbox(1, 6, 1, 1, function()
         playSound("nav")
         currentPage = "MAIN"
     end)
 
-    -- Title
     mon.setBackgroundColor(tc)
     mon.setTextColor(colors.white)
     local controlTitle = (selectedMach.icon or "\7") .. " " .. selectedMach.machineName:upper() .. " CONTROL"
     writeAt(8, 1, controlTitle, colors.white, tc)
 
-    -- Progress bar (right side, safe positioning)
     local barWidth = 7
     local barX = w - barWidth - 4
     if barX > 8 + #controlTitle + 1 then
         drawProgressBar(barX, 1, barWidth, selectedMach.chestPercent)
     end
 
-    -- Thin accent divider under header
     fill(1, 2, w, 1, colors.black)
     mon.setBackgroundColor(tc)
     mon.setTextColor(colors.black)
     mon.setCursorPos(1, 2)
-    mon.write(string.rep("\140", w))  -- \140 = horizontal line char in CC font
+    mon.write(string.rep("\140", w))
     mon.setBackgroundColor(colors.black)
 
     local currentY = 4
     if selectedMach.warning then
-        -- Warning banner with background highlight
         fill(1, 3, w, 1, colors.red)
         local warnText = "\7 " .. selectedMach.warning .. " \7"
         local wx = math.max(1, math.floor((w - #warnText) / 2) + 1)
@@ -323,10 +308,8 @@ local function drawSubPage(machName)
 
         drawButton(2, currentY, 14, 3, displayLabel, btnColor, btnTextColor, true)
 
-        -- Coloured left gutter strip for info section
         fill(17, currentY, 1, 3, tc)
 
-        -- Info text
         mon.setBackgroundColor(colors.black)
         mon.setTextColor(tc)
         writeAt(19, currentY, block.name:upper(), tc, colors.black)
@@ -334,7 +317,6 @@ local function drawSubPage(machName)
         writeAt(19, currentY + 1, block.info1, colors.lightGray, colors.black)
         writeAt(19, currentY + 2, block.info2, colors.lightGray, colors.black)
 
-        -- Capture for closure
         local capturedBlock = block
         local capturedMach  = selectedMach
         registerHitbox(2, 15, currentY, currentY + 2, function()
