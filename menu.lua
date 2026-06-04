@@ -99,7 +99,7 @@ local function runBootAnimation()
     for line = 1, h do
         mon.setTextColor(colors.lime)
         mon.setCursorPos(math.random(1, w), line)
-        mon.write("#") -- Fixed font character for matrix rain
+        mon.write("#")
         if line == math.floor(h/2) then
             mon.setCursorPos(math.floor((w - 24)/2), line)
             mon.setBackgroundColor(colors.gray)
@@ -176,7 +176,6 @@ local function drawSleekButton(x, y, width, height, text, mainColor, textColor, 
     mon.write(text)
 end
 
--- FIXED PROGRESS BAR: Uses safe standard characters (= and -) for the loading bar meter
 local function drawProgressBar(x, y, width, percent)
     local numBlocks = math.floor((percent / 100) * width)
     mon.setCursorPos(x, y)
@@ -260,14 +259,13 @@ local function drawSubPage(machName)
         local btnColor = block.active and colors.lime or colors.red
         local textColor = block.active and colors.black or colors.white
         
-        -- Safe standard labels instead of unicode checkboxes
         local displayLabel = block.active and "ACTIVE" or "OFFLINE"
         drawSleekButton(2, currentY, btnWidth, 3, displayLabel, btnColor, textColor, true)
         
         mon.setBackgroundColor(colors.black)
         mon.setTextColor(selectedMach.themeColor)
         mon.setCursorPos(18, currentY)
-        mon.write(block.name:upper()) -- Removed the arrow token here
+        mon.write(block.name:upper())
         
         mon.setTextColor(colors.lightGray)
         mon.setCursorPos(18, currentY + 1)
@@ -306,7 +304,7 @@ loadStates()
 render()
 
 -- ==========================================
--- MAIN EVENT SYSTEM LOOP
+-- MAIN EVENT SYSTEM LOOP (SYNTAX BALANCED)
 -- ==========================================
 while true do
     local event, p1, p2, p3, p4, p5 = os.pullEvent()
@@ -337,3 +335,25 @@ while true do
                     end
                 end
             end
+            
+        elseif type(message) == "string" and string.sub(message, 1, 13) == "CHEST_STATUS:" then
+            local parts = {}
+            for match in string.gmatch(message, "[^:]+") do
+                table.insert(parts, match)
+            end
+            
+            local targetName = parts[2]
+            local incomingPct = tonumber(parts[3]) or 0
+            
+            for _, mach in ipairs(network) do
+                if mach.machineName == targetName then
+                    if mach.chestPercent ~= incomingPct then
+                        mach.chestPercent = incomingPct
+                        render() 
+                    end
+                    break
+                end
+            end
+        end -- Closes the string checking statement safely!
+    end
+end
