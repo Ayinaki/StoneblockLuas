@@ -8,7 +8,7 @@ if not modem then print("Error: No modem!") return end
 mon.setTextScale(1)
 mon.clear()
 
--- MASTER DATABASE
+-- MASTER DATABASE OF ALL UNEARTHER MACHINES
 local network = {
     {
         machineName = "Archaeologist",
@@ -46,7 +46,7 @@ local currentPage = "MAIN"
 local hitboxes = {}
 local SAVE_FILE = "/button_states.txt"
 
--- Open channels
+-- Open all communication channels
 for _, mach in ipairs(network) do
     for _, block in ipairs(mach.blocks) do
         modem.open(block.channel)
@@ -91,7 +91,7 @@ local function runBootAnimation()
             mon.setCursorPos(math.floor((w - 18)/2), line)
             mon.setBackgroundColor(colors.gray)
             mon.setTextColor(colors.yellow)
-            mon.write(" AYINAKI BOOTING... ")
+            mon.write(" NET-OS BOOTING... ")
             mon.setBackgroundColor(colors.black)
         end
         os.sleep(0.05)
@@ -292,6 +292,7 @@ render()
 while true do
     local event, p1, p2, p3, p4, p5 = os.pullEvent()
     
+    -- Handle Monitor Touches
     if event == "monitor_touch" and p1 == peripheral.getName(mon) then
         local x, y = p2, p3
         for _, box in ipairs(hitboxes) do
@@ -302,8 +303,10 @@ while true do
             end
         end
         
+    -- Handle Sub-floor Chest Alerts & Capacity Telemetry
     elseif event == "modem_message" then
-        local listenChannel, senderChannel, message = p1, p2, p3 -- Adjusted event parsing safely
+        local listenChannel = p2
+        local message = p4
         
         if message == "CHEST_FULL" then
             for _, mach in ipairs(network) do
@@ -320,7 +323,6 @@ while true do
             
         -- Robust String Parsing for Named Chest Metric Logs
         elseif type(message) == "string" and string.sub(message, 1, 13) == "CHEST_STATUS:" then
-            -- Slice out name and percent value
             local parts = {}
             for match in string.gmatch(message, "[^:]+") do
                 table.insert(parts, match)
@@ -329,12 +331,12 @@ while true do
             local targetName = parts[2]
             local incomingPct = tonumber(parts[3]) or 0
             
-            -- Match directly against the precise machine name string!
+            -- Match directly against the machine name string
             for _, mach in ipairs(network) do
                 if mach.machineName == targetName then
                     if mach.chestPercent ~= incomingPct then
                         mach.chestPercent = incomingPct
-                        render() -- Instant visual push update!
+                        render() -- Instant visual push update
                     end
                     break
                 end
