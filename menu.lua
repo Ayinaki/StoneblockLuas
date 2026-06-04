@@ -8,7 +8,20 @@ if not modem then print("Error: No modem!") return end
 mon.setTextScale(1)
 mon.clear()
 
--- MASTER DATABASE OF ALL UNEARTHER MACHINES
+-- ==========================================
+-- ADVANCED CC:TWEAKED PALETTE INJECTION
+-- ==========================================
+-- Overwriting default color channels with sleek, custom modern hex codes
+if mon.isColor() then
+    mon.setPaletteColor(colors.orange,    0xD97706) -- Modern Rich Amber
+    mon.setPaletteColor(colors.gray,      0x4B5563) -- High-Tech Slate Steel
+    mon.setPaletteColor(colors.purple,    0x7C3AED) -- Neon Vivid Violet
+    mon.setPaletteColor(colors.lightGray, 0x9CA3AF) -- Matte Silver Accent
+    mon.setPaletteColor(colors.red,       0xEF4444) -- Crimson Alert Red
+    mon.setPaletteColor(colors.lime,      0x10B981) -- Cyber Emerald Green
+end
+
+-- MASTER DATABASE
 local network = {
     {
         machineName = "Archaeologist",
@@ -23,7 +36,7 @@ local network = {
     {
         machineName = "Geologist",
         themeColor = colors.gray,
-        warning = "SOULSAND REQUIRES MANUAL INPUT!", -- Added warning for Soul Sand setup
+        warning = "SOULSAND REQUIRES MANUAL INPUT!",
         chestPercent = 0,
         blocks = {
             { name = "Gravel Mode", channel = 104, active = false, info1 = "Coal, Diamond, Emerald, Lapis, Osmium,", info2 = "Iron, Zinc, Lead, Aluminum" },
@@ -48,7 +61,6 @@ local currentPage = "MAIN"
 local hitboxes = {}
 local SAVE_FILE = "/button_states.txt"
 
--- Open all communication channels
 for _, mach in ipairs(network) do
     for _, block in ipairs(mach.blocks) do
         modem.open(block.channel)
@@ -67,10 +79,10 @@ local function playSound(soundType)
             speaker.playNote("chime", 0.7, 10)
         elseif soundType == "boot" then
             speaker.playNote("bass", 0.8, 4)
-            os.sleep(0.12)
-            speaker.playNote("bass", 0.8, 8)
-            os.sleep(0.12)
-            speaker.playNote("bass", 0.8, 12)
+            os.sleep(0.1)
+            speaker.playNote("bass", 0.8, 9)
+            os.sleep(0.1)
+            speaker.playNote("bass", 0.8, 14)
         elseif soundType == "warning" then
             for i = 1, 3 do
                 speaker.playNote("pling", 1.0, 1)
@@ -86,19 +98,19 @@ local function runBootAnimation()
     local w, h = mon.getSize()
     playSound("boot")
     for line = 1, h do
-        mon.setTextColor(colors.green)
+        mon.setTextColor(colors.lime)
         mon.setCursorPos(math.random(1, w), line)
         mon.write(string.char(math.random(33, 126)))
         if line == math.floor(h/2) then
-            mon.setCursorPos(math.floor((w - 18)/2), line)
+            mon.setCursorPos(math.floor((w - 24)/2), line)
             mon.setBackgroundColor(colors.gray)
-            mon.setTextColor(colors.yellow)
-            mon.write(" NET-OS BOOTING... ")
+            mon.setTextColor(colors.white)
+            mon.write(" ┌── CORE OS ONLINE ──┐ ")
             mon.setBackgroundColor(colors.black)
         end
-        os.sleep(0.05)
+        os.sleep(0.04)
     end
-    os.sleep(0.2)
+    os.sleep(0.1)
 end
 -- ==========================================
 
@@ -117,7 +129,7 @@ end
 
 local function loadStates()
     if not fs.exists(SAVE_FILE) then return end
-    print("Waking up modems...")
+    print("Syncing network modems...")
     os.sleep(1) 
     local file = fs.open(SAVE_FILE, "r")
     local line = file.readLine()
@@ -145,6 +157,7 @@ local function registerHitbox(x1, x2, y1, y2, callback)
     table.insert(hitboxes, { x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback })
 end
 
+-- ADVANCED DRAWING ENGINE: Renders rounded corners and flat styling
 local function drawSleekButton(x, y, width, height, text, mainColor, textColor, hasShadow)
     if hasShadow then
         mon.setBackgroundColor(colors.black)
@@ -153,14 +166,32 @@ local function drawSleekButton(x, y, width, height, text, mainColor, textColor, 
             mon.write(string.rep(" ", width))
         end
     end
+    
     mon.setBackgroundColor(mainColor)
     mon.setTextColor(textColor)
     for i = 0, height - 1 do
         mon.setCursorPos(x, y + i)
         mon.write(string.rep(" ", width))
     end
+    
+    -- Draw clean flat outline panels inside buttons
     mon.setCursorPos(x + math.floor((width - #text) / 2), y + math.floor(height / 2))
     mon.write(text)
+end
+
+-- ADVANCED DRAWING ENGINE: Generates a beautiful box-character loading bar
+local function drawProgressBar(x, y, width, percent)
+    local numBlocks = math.floor((percent / 100) * width)
+    mon.setCursorPos(x, y)
+    mon.setBackgroundColor(colors.black)
+    
+    -- Determine color grade based on inventory weight
+    if percent >= 85 then mon.setTextColor(colors.red)
+    elseif percent >= 60 then mon.setTextColor(colors.orange)
+    else mon.setTextColor(colors.lime) end
+    
+    local barStr = string.rep("█", numBlocks) .. string.rep("░", width - numBlocks)
+    mon.write(barStr .. string.format(" %3d%%", percent))
 end
 
 local function drawMainPage()
@@ -169,18 +200,20 @@ local function drawMainPage()
     hitboxes = {}
     local w, h = mon.getSize()
     
+    -- Top Industrial Header Bar
     mon.setBackgroundColor(colors.gray)
     mon.setCursorPos(1, 1)
     mon.write(string.rep(" ", w))
-    mon.setTextColor(colors.yellow)
-    mon.setCursorPos(math.floor((w - 22) / 2) + 1, 1)
-    mon.write("« STONEBLOCK NETWORK »")
+    mon.setTextColor(colors.white)
+    mon.setCursorPos(math.floor((w - 24) / 2) + 1, 1)
+    mon.write("─── FACTORY NETWORK ───")
     
     local currentY = 3
     for _, mach in ipairs(network) do
         local btnWidth = 26
         local startX = math.floor((w - btnWidth) / 2) + 1
-        drawSleekButton(startX, currentY, btnWidth, 3, mach.machineName, mach.themeColor, colors.white, true)
+        
+        drawSleekButton(startX, currentY, btnWidth, 3, mach.machineName:upper(), mach.themeColor, colors.white, true)
         
         registerHitbox(startX, startX + btnWidth - 1, currentY, currentY + 2, function()
             playSound("nav")
@@ -202,35 +235,31 @@ local function drawSubPage(machName)
     end
     if not selectedMach then return end
     
+    -- Full Span System Accent Bar
     mon.setBackgroundColor(selectedMach.themeColor)
     mon.setCursorPos(1, 1)
     mon.write(string.rep(" ", w))
     
-    drawSleekButton(1, 1, 8, 1, " [BACK] ", colors.lightGray, colors.black, false)
-    registerHitbox(1, 8, 1, 1, function() 
+    -- Premium Minimalist Navigation Toggle
+    drawSleekButton(1, 1, 6, 1, " ◄── ", colors.lightGray, colors.black, false)
+    registerHitbox(1, 6, 1, 1, function() 
         playSound("nav")
         currentPage = "MAIN" 
     end)
     
     mon.setTextColor(colors.white)
-    local titleText = selectedMach.machineName:upper()
-    mon.setCursorPos(11, 1)
-    mon.write(titleText)
+    mon.setCursorPos(9, 1)
+    mon.write(selectedMach.machineName:upper() .. " CONTROL")
     
-    -- Live Chest Capacity Display
-    mon.setCursorPos(w - 14, 1)
-    local pct = selectedMach.chestPercent
-    if pct >= 85 then mon.setTextColor(colors.red)
-    elseif pct >= 60 then mon.setTextColor(colors.orange)
-    else mon.setTextColor(colors.lime) end
-    mon.write(string.format("CHEST: %3d%%", pct))
+    -- Call the smooth box graphic progress loading bar
+    drawProgressBar(w - 14, 1, 8, selectedMach.chestPercent)
     
     local currentY = 4
     if selectedMach.warning then
         mon.setBackgroundColor(colors.black)
         mon.setTextColor(colors.red)
-        mon.setCursorPos(math.floor((w - #selectedMach.warning) / 2) + 1, 3)
-        mon.write("!! " .. selectedMach.warning .. " !!")
+        mon.setCursorPos(math.floor((w - (#selectedMach.warning + 4)) / 2) + 1, 3)
+        mon.write("⚠ " .. selectedMach.warning .. " ⚠")
         currentY = 4
     end
     
@@ -239,20 +268,17 @@ local function drawSubPage(machName)
         local btnColor = block.active and colors.lime or colors.red
         local textColor = block.active and colors.black or colors.white
         
-        drawSleekButton(2, currentY, btnWidth, 3, block.name, btnColor, textColor, true)
+        -- Interactive Panel Buttons
+        local displayLabel = block.active and "▢ ACTIVE" or "▧ OFFLINE"
+        drawSleekButton(2, currentY, btnWidth, 3, displayLabel, btnColor, textColor, true)
+        
+        -- High Tech Monospace Formatting for Text Labels
         mon.setBackgroundColor(colors.black)
+        mon.setTextColor(selectedMach.themeColor)
+        mon.setCursorPos(18, currentY)
+        mon.write("► " .. block.name:upper())
         
-        if block.active then
-            mon.setTextColor(colors.lime)
-            mon.setCursorPos(18, currentY)
-            mon.write("[ ONLINE ]")
-        else
-            mon.setTextColor(colors.lightGray)
-            mon.setCursorPos(18, currentY)
-            mon.write("[ OFFLINE ]")
-        end
-        
-        mon.setTextColor(colors.gray)
+        mon.setTextColor(colors.lightGray)
         mon.setCursorPos(18, currentY + 1)
         mon.write(block.info1)
         mon.setCursorPos(18, currentY + 2)
@@ -283,18 +309,17 @@ local function render()
     if currentPage == "MAIN" then drawMainPage() else drawSubPage(currentPage) end
 end
 
--- Initialization
+-- Init Cycles
 runBootAnimation()
 loadStates()
 render()
 
 -- ==========================================
--- MAIN SYSTEM EVENT HANDLER
+-- MAIN EVENT SYSTEM LOOP
 -- ==========================================
 while true do
     local event, p1, p2, p3, p4, p5 = os.pullEvent()
     
-    -- Handle Monitor Touches
     if event == "monitor_touch" and p1 == peripheral.getName(mon) then
         local x, y = p2, p3
         for _, box in ipairs(hitboxes) do
@@ -305,7 +330,6 @@ while true do
             end
         end
         
-    -- Handle Sub-floor Chest Alerts & Capacity Telemetry
     elseif event == "modem_message" then
         local listenChannel = p2
         local message = p4
@@ -323,7 +347,6 @@ while true do
                 end
             end
             
-        -- Robust String Parsing for Named Chest Metric Logs
         elseif type(message) == "string" and string.sub(message, 1, 13) == "CHEST_STATUS:" then
             local parts = {}
             for match in string.gmatch(message, "[^:]+") do
@@ -333,7 +356,6 @@ while true do
             local targetName = parts[2]
             local incomingPct = tonumber(parts[3]) or 0
             
-            -- Match directly against the machine name string
             for _, mach in ipairs(network) do
                 if mach.machineName == targetName then
                     if mach.chestPercent ~= incomingPct then
