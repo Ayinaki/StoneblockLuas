@@ -1,30 +1,33 @@
--- STANDALONE WIRELESS VILLAGER CHEST MONITOR (UNIVERSAL)
-local CONFIG_FILE = "/config.txt"
-
--- Default settings if config file doesn't exist yet
-local VILLAGER_NAME = "Archaeologist"
-local CHANNELS_TO_PROTECT = { 101, 102, 103 }
+-- UNIVERSAL WIRELESS VILLAGER CHEST MONITOR (LABEL-BASED)
 local CHEST_SIDE = "top" 
 
--- Load custom configuration from local drive if it exists
-if fs.exists(CONFIG_FILE) then
-    local file = fs.open(CONFIG_FILE, "r")
-    VILLAGER_NAME = file.readLine() or VILLAGER_NAME
-    
-    local channelLine = file.readLine()
-    if channelLine then
-        CHANNELS_TO_PROTECT = {}
-        for channel in string.gmatch(channelLine, "[^, ]+") do
-            table.insert(CHANNELS_TO_PROTECT, tonumber(channel))
-        end
-    end
-    file.close()
+-- 1. Read the computer's own in-game label
+local VILLAGER_NAME = os.computerLabel()
+
+if not VILLAGER_NAME then
+    print("[ERROR] This computer has no label!")
+    print("Please run: label set <Name>")
+    return
+end
+
+-- 2. Dynamically assign channels based on the label name
+local CHANNELS_TO_PROTECT = {}
+if VILLAGER_NAME == "Archaeologist" then
+    CHANNELS_TO_PROTECT = { 101, 102, 103 }
+elseif VILLAGER_NAME == "Geologist" then
+    CHANNELS_TO_PROTECT = { 104, 105 }
+elseif VILLAGER_NAME == "Dimensionalist" then
+    CHANNELS_TO_PROTECT = { 106, 107, 108 }
+else
+    print("[ERROR] Unknown computer label: " .. VILLAGER_NAME)
+    return
 end
 
 local modem = peripheral.find("modem") or error("No wireless/ender modem found!")
 print("----------------------------------------")
 print(" SYSTEM: SHARED VILLAGER CHEST MONITOR")
-print(" TARGETING: " .. VILLAGER_NAME)
+print(" DETECTED PROFILE: " .. VILLAGER_NAME)
+print(" PROTECTING FREQUENCIES... ")
 print("----------------------------------------")
 
 while true do
@@ -37,9 +40,9 @@ while true do
         for _ in pairs(occupiedSlotsList) do filledSlots = filledSlots + 1 end
         
         local fullPercent = math.floor((filledSlots / totalSlots) * 100)
-        print(string.format("Shared Chest Space: %d%% occupied", fullPercent))
+        print(string.format("[%s Chest] Space: %d%% occupied", VILLAGER_NAME, fullPercent))
         
-        -- Send a robust string containing the name AND percentage
+        -- Broadcast live metrics string containing the label name and percent
         for _, channel in ipairs(CHANNELS_TO_PROTECT) do
             modem.transmit(channel, channel, "CHEST_STATUS:" .. VILLAGER_NAME .. ":" .. tostring(fullPercent))
         end
