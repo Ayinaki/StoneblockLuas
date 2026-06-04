@@ -23,6 +23,7 @@ local network = {
     {
         machineName = "Geologist",
         themeColor = colors.gray,
+        warning = "SOULSAND REQUIRES MANUAL INPUT!", -- Added warning for Soul Sand setup
         chestPercent = 0,
         blocks = {
             { name = "Gravel Mode", channel = 104, active = false, info1 = "Coal, Diamond, Emerald, Lapis, Osmium,", info2 = "Iron, Zinc, Lead, Aluminum" },
