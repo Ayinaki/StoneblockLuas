@@ -9,15 +9,17 @@ mon.setTextScale(1)
 mon.clear()
 
 -- ==========================================
--- ADVANCED CC:TWEAKED PALETTE INJECTION
+-- PALETTE
 -- ==========================================
 if mon.isColor() then
-    mon.setPaletteColor(colors.orange,    0xD97706) -- Modern Rich Amber
-    mon.setPaletteColor(colors.gray,      0x4B5563) -- High-Tech Slate Steel
-    mon.setPaletteColor(colors.purple,    0x7C3AED) -- Neon Vivid Violet
-    mon.setPaletteColor(colors.lightGray, 0x9CA3AF) -- Matte Silver Accent
-    mon.setPaletteColor(colors.red,       0xEF4444) -- Crimson Alert Red
-    mon.setPaletteColor(colors.lime,      0x10B981) -- Cyber Emerald Green
+    mon.setPaletteColor(colors.orange,    0xD97706)
+    mon.setPaletteColor(colors.gray,      0x4B5563)
+    mon.setPaletteColor(colors.purple,    0x7C3AED)
+    mon.setPaletteColor(colors.lightGray, 0x9CA3AF)
+    mon.setPaletteColor(colors.red,       0xEF4444)
+    mon.setPaletteColor(colors.lime,      0x10B981)
+    mon.setPaletteColor(colors.cyan,      0x06B6D4)
+    mon.setPaletteColor(colors.yellow,    0xFBBF24)
 end
 
 -- MASTER DATABASE
@@ -25,38 +27,41 @@ local network = {
     {
         machineName = "Archaeologist",
         themeColor = colors.orange,
-        chestPercent = 0, 
+        icon = "\4",
+        chestPercent = 0,
         blocks = {
             { name = "Dirt Mode",  channel = 101, active = false, info1 = "Magic Saplings, Pebbles,", info2 = "Seeds" },
-            { name = "Sand Mode",  channel = 102, active = false, info1 = "Clay, Copper, Silver,", info2 = "Nickel, Uranium" },
-            { name = "Dust Mode",  channel = 103, active = false, info1 = "Redstone, Gold, Tin,",  info2 = "Bonemeal" }
+            { name = "Sand Mode",  channel = 102, active = false, info1 = "Clay, Copper, Silver,",    info2 = "Nickel, Uranium" },
+            { name = "Dust Mode",  channel = 103, active = false, info1 = "Redstone, Gold, Tin,",     info2 = "Bonemeal" }
         }
     },
     {
         machineName = "Geologist",
         themeColor = colors.gray,
+        icon = "\5",
         warning = "SOULSAND REQUIRES MANUAL INPUT!",
         chestPercent = 0,
         blocks = {
-            { name = "Gravel Mode", channel = 104, active = false, info1 = "Coal, Diamond, Emerald, Lapis, Osmium,", info2 = "Iron, Zinc, Lead, Aluminum" },
-            { name = "Cobble Mode", channel = 105, active = false, info1 = "Stoneium", info2 = "" },
-            { name = "SoulSand Mode", channel = 106, active = false, info1 = "Nether Quartz, Black Quartz,", info2 = "Glowstone Dust" }
+            { name = "Gravel Mode",   channel = 104, active = false, info1 = "Coal, Diamond, Emerald, Lapis,", info2 = "Iron, Zinc, Lead, Aluminum" },
+            { name = "Cobble Mode",   channel = 105, active = false, info1 = "Stoneium",                       info2 = "" },
+            { name = "SoulSand Mode", channel = 106, active = false, info1 = "Nether Quartz, Black Quartz,",   info2 = "Glowstone Dust" }
         }
     },
     {
         machineName = "Dimensionalist",
         themeColor = colors.purple,
+        icon = "\7",
         warning = "MANUAL REFILL REQUIRED!",
         chestPercent = 0,
         blocks = {
-            { name = "Otherrock",   channel = 107, active = false, info1 = "Replica,", info2 = "Certus Quartz Dust" },
-            { name = "Netherrack",  channel = 108, active = false, info1 = "Sulfur, Blaze Powder, Iesnium,", info2 = "Netherite Scrap" },
-            { name = "End Stone",   channel = 109, active = false, info1 = "Fluorite, Platinum,", info2 = "Draconium, Dim Shard" }
+            { name = "Otherrock",  channel = 107, active = false, info1 = "Replica,",                    info2 = "Certus Quartz Dust" },
+            { name = "Netherrack", channel = 108, active = false, info1 = "Sulfur, Blaze Powder, Iesnium,", info2 = "Netherite Scrap" },
+            { name = "End Stone",  channel = 109, active = false, info1 = "Fluorite, Platinum,",         info2 = "Draconium, Dim Shard" }
         }
     }
 }
 
-local currentPage = "MAIN" 
+local currentPage = "MAIN"
 local hitboxes = {}
 local SAVE_FILE = "/button_states.txt"
 
@@ -100,18 +105,19 @@ local function runBootAnimation()
         mon.setTextColor(colors.lime)
         mon.setCursorPos(math.random(1, w), line)
         mon.write("#")
-        if line == math.floor(h/2) then
-            mon.setCursorPos(math.floor((w - 24)/2), line)
-            mon.setBackgroundColor(colors.gray)
-            mon.setTextColor(colors.white)
-            mon.write(" [=== CORE OS ONLINE ===] ")
+        if line == math.floor(h / 2) then
+            local msg = " FACTORY OS v2.0 "
+            local mx = math.max(1, math.floor((w - #msg) / 2) + 1)
+            mon.setCursorPos(mx, line)
+            mon.setBackgroundColor(colors.lime)
+            mon.setTextColor(colors.black)
+            mon.write(msg)
             mon.setBackgroundColor(colors.black)
         end
         os.sleep(0.04)
     end
     os.sleep(0.1)
 end
--- ==========================================
 
 -- ==========================================
 -- PERSISTENCE ENGINE
@@ -129,7 +135,7 @@ end
 local function loadStates()
     if not fs.exists(SAVE_FILE) then return end
     print("Syncing network modems...")
-    os.sleep(1) 
+    os.sleep(1)
     local file = fs.open(SAVE_FILE, "r")
     local line = file.readLine()
     while line do
@@ -141,8 +147,7 @@ local function loadStates()
             for _, block in ipairs(mach.blocks) do
                 if block.channel == channel then
                     block.active = active
-                    local signal = active and "ON" or "OFF"
-                    modem.transmit(channel, channel, signal)
+                    modem.transmit(channel, channel, active and "ON" or "OFF")
                 end
             end
         end
@@ -150,143 +155,202 @@ local function loadStates()
     end
     file.close()
 end
--- ==========================================
 
+-- ==========================================
+-- DRAWING HELPERS
+-- ==========================================
 local function registerHitbox(x1, x2, y1, y2, callback)
-    table.insert(hitboxes, { x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback })
+    table.insert(hitboxes, { x1=x1, x2=x2, y1=y1, y2=y2, callback=callback })
 end
 
-local function drawSleekButton(x, y, width, height, text, mainColor, textColor, hasShadow)
-    if hasShadow then
-        mon.setBackgroundColor(colors.black)
-        for i = 1, height do
-            mon.setCursorPos(x + 1, y + i)
-            mon.write(string.rep(" ", width))
-        end
-    end
-    
-    mon.setBackgroundColor(mainColor)
-    mon.setTextColor(textColor)
+local function fill(x, y, width, height, bg)
+    mon.setBackgroundColor(bg)
     for i = 0, height - 1 do
         mon.setCursorPos(x, y + i)
         mon.write(string.rep(" ", width))
     end
-    
-    mon.setCursorPos(x + math.floor((width - #text) / 2), y + math.floor(height / 2))
+end
+
+local function writeAt(x, y, text, fg, bg)
+    mon.setCursorPos(x, y)
+    if bg then mon.setBackgroundColor(bg) end
+    if fg then mon.setTextColor(fg) end
     mon.write(text)
 end
 
-local function drawProgressBar(x, y, width, percent)
-    local numBlocks = math.floor((percent / 100) * width)
-    mon.setCursorPos(x, y)
+local function drawButton(x, y, width, height, text, mainColor, textColor, hasShadow)
+    if hasShadow then
+        fill(x + 1, y + 1, width, height, colors.black)
+    end
+    fill(x, y, width, height, mainColor)
+    local tx = x + math.max(0, math.floor((width - #text) / 2))
+    local ty = y + math.floor(height / 2)
+    writeAt(tx, ty, text, textColor, mainColor)
+    -- restore
     mon.setBackgroundColor(colors.black)
-    
-    if percent >= 85 then mon.setTextColor(colors.red)
-    elseif percent >= 60 then mon.setTextColor(colors.orange)
-    else mon.setTextColor(colors.lime) end
-    
-    local barStr = "[" .. string.rep("=", numBlocks) .. string.rep("-", width - numBlocks) .. "]"
-    mon.write(barStr .. string.format(" %3d%%", percent))
+    mon.setTextColor(colors.white)
 end
 
+-- Solid colour-block progress bar — no special characters
+local function drawProgressBar(x, y, width, percent)
+    local filled = math.floor((percent / 100) * width)
+    local empty  = width - filled
+    local barColor
+    if percent >= 85 then barColor = colors.red
+    elseif percent >= 60 then barColor = colors.orange
+    else barColor = colors.lime end
+
+    mon.setCursorPos(x, y)
+    mon.setBackgroundColor(barColor)
+    mon.setTextColor(colors.black)
+    if filled > 0 then mon.write(string.rep(" ", filled)) end
+    mon.setBackgroundColor(colors.gray)
+    mon.setTextColor(colors.white)
+    if empty > 0 then mon.write(string.rep(" ", empty)) end
+    -- percent label
+    mon.setBackgroundColor(colors.black)
+    mon.setTextColor(barColor)
+    mon.write(" " .. tostring(math.floor(percent)) .. "%")
+    -- restore
+    mon.setBackgroundColor(colors.black)
+    mon.setTextColor(colors.white)
+end
+
+-- ==========================================
+-- MAIN PAGE
+-- ==========================================
 local function drawMainPage()
     mon.setBackgroundColor(colors.black)
     mon.clear()
     hitboxes = {}
     local w, h = mon.getSize()
-    
-    mon.setBackgroundColor(colors.gray)
-    mon.setCursorPos(1, 1)
-    mon.write(string.rep(" ", w))
-    mon.setTextColor(colors.white)
-    mon.setCursorPos(math.floor((w - 22) / 2) + 1, 1)
-    mon.write("=== FACTORY NETWORK ===")
-    
-    local currentY = 3
-    for _, mach in ipairs(network) do
-        local btnWidth = 26
-        local startX = math.floor((w - btnWidth) / 2) + 1
-        
-        drawSleekButton(startX, currentY, btnWidth, 3, mach.machineName:upper(), mach.themeColor, colors.white, true)
-        
+
+    -- Two-tone header: dark side strips + bright centre title
+    fill(1, 1, w, 2, colors.gray)
+    local title = "FACTORY NETWORK"
+    local tx = math.max(1, math.floor((w - #title) / 2) + 1)
+    -- accent bar on row 1
+    fill(1, 1, w, 1, colors.lightGray)
+    writeAt(tx - 2, 1, "\x10 " .. title .. " \x11", colors.black, colors.lightGray)
+    -- subtitle bar on row 2
+    writeAt(math.max(1, math.floor((w - 18) / 2) + 1), 2, "UNEARTHING CONTROL", colors.gray, colors.black)
+
+    local currentY = 4
+    for i, mach in ipairs(network) do
+        local btnWidth = math.min(26, w - 2)
+        local startX = math.max(1, math.floor((w - btnWidth) / 2) + 1)
+
+        drawButton(startX, currentY, btnWidth, 3, (mach.icon or "\7") .. " " .. mach.machineName:upper(), mach.themeColor, colors.white, true)
+
+        -- connector dot between buttons
+        if i < #network then
+            writeAt(math.floor(w / 2), currentY + 3, "+", colors.lightGray, colors.black)
+        end
+
+        local capturedMach = mach
         registerHitbox(startX, startX + btnWidth - 1, currentY, currentY + 2, function()
             playSound("nav")
-            currentPage = mach.machineName
+            currentPage = capturedMach.machineName
         end)
         currentY = currentY + 4
     end
 end
 
+-- ==========================================
+-- SUB PAGE
+-- ==========================================
 local function drawSubPage(machName)
     mon.setBackgroundColor(colors.black)
     mon.clear()
     hitboxes = {}
     local w, h = mon.getSize()
-    
+
     local selectedMach = nil
     for _, m in ipairs(network) do
         if m.machineName == machName then selectedMach = m break end
     end
     if not selectedMach then return end
-    
-    mon.setBackgroundColor(selectedMach.themeColor)
-    mon.setCursorPos(1, 1)
-    mon.write(string.rep(" ", w))
-    
-    drawSleekButton(1, 1, 6, 1, " BACK ", colors.lightGray, colors.black, false)
-    registerHitbox(1, 6, 1, 1, function() 
+
+    local tc = selectedMach.themeColor
+
+    -- Header: full-width theme colour bar
+    fill(1, 1, w, 1, tc)
+
+    -- BACK button
+    drawButton(1, 1, 6, 1, "BACK", colors.lightGray, colors.black, false)
+    registerHitbox(1, 6, 1, 1, function()
         playSound("nav")
-        currentPage = "MAIN" 
+        currentPage = "MAIN"
     end)
-    
+
+    -- Title
+    mon.setBackgroundColor(tc)
     mon.setTextColor(colors.white)
-    mon.setCursorPos(8, 1)
-    mon.write(selectedMach.machineName:upper() .. " CONTROL")
-    
-    drawProgressBar(w - 15, 1, 7, selectedMach.chestPercent)
-    
+    local controlTitle = (selectedMach.icon or "\7") .. " " .. selectedMach.machineName:upper() .. " CONTROL"
+    writeAt(8, 1, controlTitle, colors.white, tc)
+
+    -- Progress bar (right side, safe positioning)
+    local barWidth = 7
+    local barX = w - barWidth - 4
+    if barX > 8 + #controlTitle + 1 then
+        drawProgressBar(barX, 1, barWidth, selectedMach.chestPercent)
+    end
+
+    -- Thin accent divider under header
+    fill(1, 2, w, 1, colors.black)
+    mon.setBackgroundColor(tc)
+    mon.setTextColor(colors.black)
+    mon.setCursorPos(1, 2)
+    mon.write(string.rep("\140", w))  -- \140 = horizontal line char in CC font
+    mon.setBackgroundColor(colors.black)
+
     local currentY = 4
     if selectedMach.warning then
+        -- Warning banner with background highlight
+        fill(1, 3, w, 1, colors.red)
+        local warnText = "\7 " .. selectedMach.warning .. " \7"
+        local wx = math.max(1, math.floor((w - #warnText) / 2) + 1)
+        writeAt(wx, 3, warnText, colors.white, colors.red)
         mon.setBackgroundColor(colors.black)
-        mon.setTextColor(colors.red)
-        mon.setCursorPos(math.floor((w - (#selectedMach.warning + 4)) / 2) + 1, 3)
-        mon.write("!! " .. selectedMach.warning .. " !!")
-        currentY = 4
+        currentY = 5
     end
-    
+
     for _, block in ipairs(selectedMach.blocks) do
-        local btnWidth = 14
-        local btnColor = block.active and colors.lime or colors.red
-        local textColor = block.active and colors.black or colors.white
-        
-        local displayLabel = block.active and "ACTIVE" or "OFFLINE"
-        drawSleekButton(2, currentY, btnWidth, 3, displayLabel, btnColor, textColor, true)
-        
+        local btnColor     = block.active and colors.lime or colors.red
+        local btnTextColor = block.active and colors.black or colors.white
+        local statusIcon   = block.active and "\4" or "\7"
+        local displayLabel = statusIcon .. " " .. (block.active and "ACTIVE" or "OFFLINE")
+
+        drawButton(2, currentY, 14, 3, displayLabel, btnColor, btnTextColor, true)
+
+        -- Coloured left gutter strip for info section
+        fill(17, currentY, 1, 3, tc)
+
+        -- Info text
         mon.setBackgroundColor(colors.black)
-        mon.setTextColor(selectedMach.themeColor)
-        mon.setCursorPos(18, currentY)
-        mon.write(block.name:upper())
-        
+        mon.setTextColor(tc)
+        writeAt(19, currentY, block.name:upper(), tc, colors.black)
         mon.setTextColor(colors.lightGray)
-        mon.setCursorPos(18, currentY + 1)
-        mon.write(block.info1)
-        mon.setCursorPos(18, currentY + 2)
-        mon.write(block.info2)
-        
-        registerHitbox(2, 2 + btnWidth - 1, currentY, currentY + 2, function()
+        writeAt(19, currentY + 1, block.info1, colors.lightGray, colors.black)
+        writeAt(19, currentY + 2, block.info2, colors.lightGray, colors.black)
+
+        -- Capture for closure
+        local capturedBlock = block
+        local capturedMach  = selectedMach
+        registerHitbox(2, 15, currentY, currentY + 2, function()
             playSound("click")
-            if not block.active then
-                for _, b in ipairs(selectedMach.blocks) do
+            if not capturedBlock.active then
+                for _, b in ipairs(capturedMach.blocks) do
                     if b.active then
                         b.active = false
                         modem.transmit(b.channel, b.channel, "OFF")
                     end
                 end
-                block.active = true
-                modem.transmit(block.channel, block.channel, "ON")
+                capturedBlock.active = true
+                modem.transmit(capturedBlock.channel, capturedBlock.channel, "ON")
             else
-                block.active = false
-                modem.transmit(block.channel, block.channel, "OFF")
+                capturedBlock.active = false
+                modem.transmit(capturedBlock.channel, capturedBlock.channel, "OFF")
             end
             saveStates()
         end)
@@ -304,11 +368,11 @@ loadStates()
 render()
 
 -- ==========================================
--- MAIN EVENT SYSTEM LOOP (SYNTAX BALANCED)
+-- MAIN EVENT LOOP
 -- ==========================================
 while true do
-    local event, p1, p2, p3, p4, p5 = os.pullEvent()
-    
+    local event, p1, p2, p3, p4 = os.pullEvent()
+
     if event == "monitor_touch" and p1 == peripheral.getName(mon) then
         local x, y = p2, p3
         for _, box in ipairs(hitboxes) do
@@ -318,11 +382,11 @@ while true do
                 break
             end
         end
-        
+
     elseif event == "modem_message" then
         local listenChannel = p2
         local message = p4
-        
+
         if message == "CHEST_FULL" then
             for _, mach in ipairs(network) do
                 for _, block in ipairs(mach.blocks) do
@@ -335,25 +399,21 @@ while true do
                     end
                 end
             end
-            
+
         elseif type(message) == "string" and string.sub(message, 1, 13) == "CHEST_STATUS:" then
             local parts = {}
-            for match in string.gmatch(message, "[^:]+") do
-                table.insert(parts, match)
-            end
-            
-            local targetName = parts[2]
+            for match in string.gmatch(message, "[^:]+") do table.insert(parts, match) end
+            local targetName  = parts[2]
             local incomingPct = tonumber(parts[3]) or 0
-            
             for _, mach in ipairs(network) do
                 if mach.machineName == targetName then
                     if mach.chestPercent ~= incomingPct then
                         mach.chestPercent = incomingPct
-                        render() 
+                        render()
                     end
                     break
                 end
             end
-        end -- Closes the string checking statement safely!
+        end
     end
 end
