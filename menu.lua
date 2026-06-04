@@ -1,5 +1,6 @@
 local mon = peripheral.find("monitor")
 local modem = peripheral.find("modem")
+local speaker = peripheral.find("speaker")
 
 if not mon then print("Error: No monitor!") return end
 if not modem then print("Error: No modem!") return end
@@ -7,7 +8,7 @@ if not modem then print("Error: No modem!") return end
 mon.setTextScale(1)
 mon.clear()
 
--- MASTER DATABASE WITH COLOR THEMES
+-- MASTER DATABASE OF ALL UNEARTHER MACHINES
 local network = {
     {
         machineName = "Archaeologist",
@@ -40,12 +41,62 @@ local network = {
 
 local currentPage = "MAIN" 
 local hitboxes = {}
+local SAVE_FILE = "/button_states.txt"
+
+-- Open all active channels on the main monitor so it can hear chest alerts
+for _, mach in ipairs(network) do
+    for _, block in ipairs(mach.blocks) do
+        modem.open(block.channel)
+    end
+end
+
+-- ==========================================
+-- AUDIO ENGINE & INTRO SCRIPT
+-- ==========================================
+local function playSound(soundType)
+    if not speaker then return end
+    if soundType == "click" then
+        speaker.playNote("iron_xylophone", 1.0, 12)
+    elseif soundType == "nav" then
+        speaker.playNote("bit", 0.8, 8)
+    elseif soundType == "boot" then
+        for i = 1, 4 do
+            speaker.playNote("synthbass", 0.6, 4 + (i * 3))
+            os.sleep(0.1)
+        end
+    elseif soundType == "warning" then
+        speaker.playNote("pling", 1.0, 1)
+    end
+end
+
+local function runBootAnimation()
+    mon.setBackgroundColor(colors.black)
+    mon.clear()
+    local w, h = mon.getSize()
+    
+    playSound("boot")
+    
+    for line = 1, h do
+        mon.setTextColor(colors.green)
+        mon.setCursorPos(math.random(1, w), line)
+        mon.write(string.char(math.random(33, 126)))
+        
+        if line == math.floor(h/2) then
+            mon.setCursorPos(math.floor((w - 18)/2), line)
+            mon.setBackgroundColor(colors.gray)
+            mon.setTextColor(colors.yellow)
+            mon.write(" NET-OS BOOTING... ")
+            mon.setBackgroundColor(colors.black)
+        end
+        os.sleep(0.08)
+    end
+    os.sleep(0.5)
+end
+-- ==========================================
 
 -- ==========================================
 -- PERSISTENCE ENGINE
 -- ==========================================
-local SAVE_FILE = "/button_states.txt"
-
 local function saveStates()
     local file = fs.open(SAVE_FILE, "w")
     for _, mach in ipairs(network) do
@@ -86,39 +137,30 @@ local function registerHitbox(x1, x2, y1, y2, callback)
     table.insert(hitboxes, { x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback })
 end
 
--- ADVANCED DRAWING HELPER: Draws buttons with drop shadows
 local function drawSleekButton(x, y, width, height, text, mainColor, textColor, hasShadow)
     if hasShadow then
-        -- Draw black/dark shadow offset down and right
         mon.setBackgroundColor(colors.black)
         for i = 1, height do
             mon.setCursorPos(x + 1, y + i)
             mon.write(string.rep(" ", width))
         end
     end
-
-    -- Draw Main Button Face
     mon.setBackgroundColor(mainColor)
     mon.setTextColor(textColor)
     for i = 0, height - 1 do
         mon.setCursorPos(x, y + i)
         mon.write(string.rep(" ", width))
     end
-    
-    -- Center Text Vertically and Horizontally
     mon.setCursorPos(x + math.floor((width - #text) / 2), y + math.floor(height / 2))
     mon.write(text)
 end
 
--- RENDER: MAIN PAGE
 local function drawMainPage()
     mon.setBackgroundColor(colors.black)
     mon.clear()
     hitboxes = {}
-    
     local w, h = mon.getSize()
     
-    -- Header Bar
     mon.setBackgroundColor(colors.gray)
     mon.setCursorPos(1, 1)
     mon.write(string.rep(" ", w))
@@ -130,50 +172,44 @@ local function drawMainPage()
     for _, mach in ipairs(network) do
         local btnWidth = 26
         local startX = math.floor((w - btnWidth) / 2) + 1
-        
-        -- Use the machine's custom theme color for its main menu button
         drawSleekButton(startX, currentY, btnWidth, 3, mach.machineName, mach.themeColor, colors.white, true)
         
         registerHitbox(startX, startX + btnWidth - 1, currentY, currentY + 2, function()
+            playSound("nav")
             currentPage = mach.machineName
         end)
-        
         currentY = currentY + 4
     end
 end
 
--- RENDER: SUB PAGES
 local function drawSubPage(machName)
     mon.setBackgroundColor(colors.black)
     mon.clear()
     hitboxes = {}
-    
     local w, h = mon.getSize()
     
-    -- Find the active machine dataset
     local selectedMach = nil
     for _, m in ipairs(network) do
         if m.machineName == machName then selectedMach = m break end
     end
     if not selectedMach then return end
     
-    -- High Tech Header Bar styled in the machine's theme color
     mon.setBackgroundColor(selectedMach.themeColor)
     mon.setCursorPos(1, 1)
     mon.write(string.rep(" ", w))
     
-    -- Back Button inside Header
     drawSleekButton(1, 1, 8, 1, " [BACK] ", colors.lightGray, colors.black, false)
-    registerHitbox(1, 8, 1, 1, function() currentPage = "MAIN" end)
+    registerHitbox(1, 8, 1, 1, function() 
+        playSound("nav")
+        currentPage = "MAIN" 
+    end)
     
-    -- Title Text centered in header bar
     mon.setTextColor(colors.white)
     local titleText = selectedMach.machineName:upper() .. " SYSTEM"
     mon.setCursorPos(math.floor((w - #titleText) / 2) + 4, 1)
     mon.write(titleText)
     
-    -- If it requires manual refills, show a flashing-style notice banner
-    local currentY = 3
+    local currentY = 4
     if selectedMach.warning then
         mon.setBackgroundColor(colors.black)
         mon.setTextColor(colors.red)
@@ -182,19 +218,14 @@ local function drawSubPage(machName)
         currentY = 4
     end
     
-    -- Draw Sub-buttons
     for _, block in ipairs(selectedMach.blocks) do
         local btnWidth = 14
-        -- Premium neon-tinted active/inactive colors instead of raw green/red
         local btnColor = block.active and colors.lime or colors.red
         local textColor = block.active and colors.black or colors.white
         
         drawSleekButton(2, currentY, btnWidth, 3, block.name, btnColor, textColor, true)
-        
-        -- Text Display Area (Sleeker spacing & formatting)
         mon.setBackgroundColor(colors.black)
         
-        -- Clean Digital Readout Status String
         if block.active then
             mon.setTextColor(colors.lime)
             mon.setCursorPos(18, currentY)
@@ -212,36 +243,68 @@ local function drawSubPage(machName)
         mon.write(block.info2)
         
         registerHitbox(2, 2 + btnWidth - 1, currentY, currentY + 2, function()
-            block.active = not block.active
-            local signal = block.active and "ON" or "OFF"
-            modem.transmit(block.channel, block.channel, signal)
+            playSound("click")
+            
+            if not block.active then
+                for _, b in ipairs(selectedMach.blocks) do
+                    if b.active then
+                        b.active = false
+                        modem.transmit(b.channel, b.channel, "OFF")
+                    end
+                end
+                block.active = true
+                modem.transmit(block.channel, block.channel, "ON")
+            else
+                block.active = false
+                modem.transmit(block.channel, block.channel, "OFF")
+            end
+            
             saveStates()
         end)
-        
         currentY = currentY + 4
     end
 end
 
 local function render()
-    if currentPage == "MAIN" then
-        drawMainPage()
-    else
-        drawSubPage(currentPage)
-    end
+    if currentPage == "MAIN" then drawMainPage() else drawSubPage(currentPage) end
 end
 
+-- Initialization
+runBootAnimation()
 loadStates()
 render()
 
+-- ==========================================
+-- DUAL NET & TOUCH EVENT LOOP
+-- ==========================================
 while true do
-    local event, targetDevice, x, y = os.pullEvent("monitor_touch")
+    local event, p1, p2, p3, p4, p5 = os.pullEvent()
     
-    if targetDevice == peripheral.getName(mon) then
+    -- Handle Monitor Touches
+    if event == "monitor_touch" and p1 == peripheral.getName(mon) then
+        local x, y = p2, p3
         for _, box in ipairs(hitboxes) do
             if x >= box.x1 and x <= box.x2 and y >= box.y1 and y <= box.y2 then
                 box.callback()
                 render()
                 break
+            end
+        end
+        
+    -- Handle Sub-floor Chest Overflow Wireless Alerts
+    elseif event == "modem_message" then
+        local channel, message = p2, p4
+        if message == "CHEST_FULL" then
+            -- Sweep database, turn off the active block linked to this channel
+            for _, mach in ipairs(network) do
+                for _, block in ipairs(mach.blocks) do
+                    if block.channel == channel and block.active then
+                        block.active = false
+                        playSound("warning") -- Ping speaker alarm!
+                        saveStates()
+                        render()
+                    end
+                end
             end
         end
     end
