@@ -7,7 +7,7 @@ if not modem then print("Error: No modem!") return end
 mon.setTextScale(1)
 mon.clear()
 
--- MASTER DATABASE
+-- MASTER DATABASE OF ALL UNEARTHER MACHINES
 local network = {
     {
         machineName = "Archaeologist",
@@ -18,10 +18,19 @@ local network = {
         }
     },
     {
-        machineName = "Miner (Future)",
+        machineName = "Geologist (WIP)",
         blocks = {
-            { name = "Stone Mode", channel = 104, active = false, info1 = "Coal, Iron, Diamonds", info2 = "" },
-            { name = "Deepslate",  channel = 105, active = false, info1 = "Redstone, Lapis,",      info2 = "Netherite" }
+            { name = "Gravel Mode", channel = 104, active = false, info1 = "Coal, Diamond, Emerald, Lapis, Osmium,", info2 = "Iron, Zinc, Lead, Aluminum" },
+            { name = "Cobble Mode", channel = 105, active = false, info1 = "Stoneium", info2 = "" }
+        }
+    },
+    {
+        machineName = "Dimensional (WIP)",
+        warning = "MANUAL REFILL REQUIRED!",
+        blocks = {
+            { name = "Otherrock",   channel = 106, active = false, info1 = "Replica,", info2 = "Certus Quartz Dust" },
+            { name = "Netherrack",  channel = 107, active = false, info1 = "Sulfur, Blaze Powder, Iesnium,", info2 = "Netherite Scrap" },
+            { name = "End Stone",   channel = 108, active = false, info1 = "Fluorite, Platinum,", info2 = "Draconium, Dim Shard" }
         }
     }
 }
@@ -30,9 +39,9 @@ local currentPage = "MAIN"
 local hitboxes = {}
 
 -- ==========================================
--- FIXED PERSISTENCE ENGINE (With Absolute Paths)
+-- PERSISTENCE ENGINE
 -- ==========================================
-local SAVE_FILE = "/button_states.txt" -- Added forward slash to force root directory
+local SAVE_FILE = "/button_states.txt"
 
 local function saveStates()
     local file = fs.open(SAVE_FILE, "w")
@@ -45,12 +54,8 @@ local function saveStates()
 end
 
 local function loadStates()
-    if not fs.exists(SAVE_FILE) then 
-        print("No save file found yet. Creating fresh states.")
-        return 
-    end
+    if not fs.exists(SAVE_FILE) then return end
     
-    -- Give modems 2 seconds to connect to the network before blasting signals
     print("Waking up modems...")
     os.sleep(2) 
     
@@ -72,7 +77,6 @@ local function loadStates()
                     block.active = active
                     local signal = active and "ON" or "OFF"
                     modem.transmit(channel, channel, signal)
-                    print("Restored channel " .. channel .. " to " .. tostring(active))
                 end
             end
         end
@@ -113,7 +117,9 @@ local function drawMainPage()
         local btnWidth = 26
         local startX = math.floor((w - btnWidth) / 2) + 1
         
-        drawButton(startX, currentY, btnWidth, 3, mach.machineName, colors.blue, colors.white)
+        local btnColor = mach.warning and colors.purple or colors.blue
+        
+        drawButton(startX, currentY, btnWidth, 3, mach.machineName, btnColor, colors.white)
         registerHitbox(startX, startX + btnWidth - 1, currentY, currentY + 2, function()
             currentPage = mach.machineName
         end)
@@ -132,10 +138,6 @@ local function drawSubPage(machName)
     drawButton(2, 1, 6, 1, "< BACK", colors.gray, colors.white)
     registerHitbox(2, 7, 1, 1, function() currentPage = "MAIN" end)
     
-    mon.setTextColor(colors.cyan)
-    mon.setCursorPos(10, 1)
-    mon.write(machName:upper() .. " CONTROLS")
-    
     local selectedMach = nil
     for _, m in ipairs(network) do
         if m.machineName == machName then selectedMach = m break end
@@ -143,7 +145,17 @@ local function drawSubPage(machName)
     
     if not selectedMach then return end
     
-    local currentY = 3
+    mon.setTextColor(colors.cyan)
+    mon.setCursorPos(10, 1)
+    mon.write(machName:upper())
+    
+    if selectedMach.warning then
+        mon.setTextColor(colors.orange)
+        mon.setCursorPos(10, 2)
+        mon.write(selectedMach.warning)
+    end
+    
+    local currentY = 4
     for _, block in ipairs(selectedMach.blocks) do
         local btnWidth = 14
         local btnColor = block.active and colors.green or colors.red
@@ -177,7 +189,6 @@ local function render()
     end
 end
 
--- LOAD AND TRANSMIT BACKED UP SIGNALS
 loadStates()
 render()
 
