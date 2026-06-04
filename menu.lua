@@ -91,7 +91,7 @@ local function runBootAnimation()
             mon.setCursorPos(math.floor((w - 18)/2), line)
             mon.setBackgroundColor(colors.gray)
             mon.setTextColor(colors.yellow)
-            mon.write(" NET-OS BOOTING... ")
+            mon.write(" AYINAKI BOOTING... ")
             mon.setBackgroundColor(colors.black)
         end
         os.sleep(0.05)
