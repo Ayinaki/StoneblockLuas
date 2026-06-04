@@ -13,6 +13,7 @@ local network = {
     {
         machineName = "Archaeologist",
         themeColor = colors.orange,
+        chestPercent = 0, -- Track live capacity %
         blocks = {
             { name = "Dirt Mode",  channel = 101, active = false, info1 = "Magic Saplings, Pebbles,", info2 = "Seeds" },
             { name = "Sand Mode",  channel = 102, active = false, info1 = "Clay, Copper, Silver,", info2 = "Nickel, Uranium" },
@@ -22,6 +23,7 @@ local network = {
     {
         machineName = "Geologist (WIP)",
         themeColor = colors.gray,
+        chestPercent = 0,
         blocks = {
             { name = "Gravel Mode", channel = 104, active = false, info1 = "Coal, Diamond, Emerald, Lapis, Osmium,", info2 = "Iron, Zinc, Lead, Aluminum" },
             { name = "Cobble Mode", channel = 105, active = false, info1 = "Stoneium", info2 = "" }
@@ -31,6 +33,7 @@ local network = {
         machineName = "Dimensional (WIP)",
         themeColor = colors.purple,
         warning = "MANUAL REFILL REQUIRED!",
+        chestPercent = 0,
         blocks = {
             { name = "Otherrock",   channel = 106, active = false, info1 = "Replica,", info2 = "Certus Quartz Dust" },
             { name = "Netherrack",  channel = 107, active = false, info1 = "Sulfur, Blaze Powder, Iesnium,", info2 = "Netherite Scrap" },
@@ -43,7 +46,7 @@ local currentPage = "MAIN"
 local hitboxes = {}
 local SAVE_FILE = "/button_states.txt"
 
--- Open all active channels on the main monitor so it can hear chest alerts
+-- Open all channels
 for _, mach in ipairs(network) do
     for _, block in ipairs(mach.blocks) do
         modem.open(block.channel)
@@ -51,22 +54,28 @@ for _, mach in ipairs(network) do
 end
 
 -- ==========================================
--- AUDIO ENGINE & INTRO SCRIPT
+-- FIXED AUDIO ENGINE (Vanilla Standard Sound IDs)
 -- ==========================================
 local function playSound(soundType)
     if not speaker then return end
-    if soundType == "click" then
-        speaker.playNote("iron_xylophone", 1.0, 12)
-    elseif soundType == "nav" then
-        speaker.playNote("bit", 0.8, 8)
-    elseif soundType == "boot" then
-        for i = 1, 4 do
-            speaker.playNote("synthbass", 0.6, 4 + (i * 3))
-            os.sleep(0.1)
+    pcall(function() -- Safe-guard to prevent any sound errors from ever freezing the UI
+        if soundType == "click" then
+            speaker.playNote("harp", 1.0, 12)
+        elseif soundType == "nav" then
+            speaker.playNote("chime", 0.7, 10)
+        elseif soundType == "boot" then
+            speaker.playNote("bass", 0.8, 4)
+            os.sleep(0.12)
+            speaker.playNote("bass", 0.8, 8)
+            os.sleep(0.12)
+            speaker.playNote("bass", 0.8, 12)
+        elseif soundType == "warning" then
+            for i = 1, 3 do
+                speaker.playNote("pling", 1.0, 1)
+                os.sleep(0.05)
+            end
         end
-    elseif soundType == "warning" then
-        speaker.playNote("pling", 1.0, 1)
-    end
+    end)
 end
 
 local function runBootAnimation()
@@ -88,9 +97,9 @@ local function runBootAnimation()
             mon.write(" NET-OS BOOTING... ")
             mon.setBackgroundColor(colors.black)
         end
-        os.sleep(0.08)
+        os.sleep(0.05)
     end
-    os.sleep(0.5)
+    os.sleep(0.2)
 end
 -- ==========================================
 
@@ -110,7 +119,7 @@ end
 local function loadStates()
     if not fs.exists(SAVE_FILE) then return end
     print("Waking up modems...")
-    os.sleep(2) 
+    os.sleep(1) 
     local file = fs.open(SAVE_FILE, "r")
     local line = file.readLine()
     while line do
@@ -204,10 +213,19 @@ local function drawSubPage(machName)
         currentPage = "MAIN" 
     end)
     
+    -- Centered Title Box
     mon.setTextColor(colors.white)
-    local titleText = selectedMach.machineName:upper() .. " SYSTEM"
-    mon.setCursorPos(math.floor((w - #titleText) / 2) + 4, 1)
+    local titleText = selectedMach.machineName:upper()
+    mon.setCursorPos(11, 1)
     mon.write(titleText)
+    
+    -- NEW: Inline Live Chest Inventory Metric
+    mon.setCursorPos(w - 14, 1)
+    local pct = selectedMach.chestPercent
+    if pct >= 85 then mon.setTextColor(colors.red)
+    elseif pct >= 60 then mon.setTextColor(colors.orange)
+    else mon.setTextColor(colors.lime) end
+    mon.write(string.format("CHEST: %3d%%", pct))
     
     local currentY = 4
     if selectedMach.warning then
@@ -275,12 +293,11 @@ loadStates()
 render()
 
 -- ==========================================
--- DUAL NET & TOUCH EVENT LOOP
+-- EVENT HANDLING SYSTEM
 -- ==========================================
 while true do
     local event, p1, p2, p3, p4, p5 = os.pullEvent()
     
-    -- Handle Monitor Touches
     if event == "monitor_touch" and p1 == peripheral.getName(mon) then
         local x, y = p2, p3
         for _, box in ipairs(hitboxes) do
@@ -291,18 +308,35 @@ while true do
             end
         end
         
-    -- Handle Sub-floor Chest Overflow Wireless Alerts
     elseif event == "modem_message" then
         local channel, message = p2, p4
+        
         if message == "CHEST_FULL" then
-            -- Sweep database, turn off the active block linked to this channel
             for _, mach in ipairs(network) do
                 for _, block in ipairs(mach.blocks) do
                     if block.channel == channel and block.active then
                         block.active = false
-                        playSound("warning") -- Ping speaker alarm!
+                        mach.chestPercent = 100
+                        playSound("warning")
                         saveStates()
                         render()
+                    end
+                end
+            end
+            
+        -- NEW: Parse live updates transmitted by floor computer
+        elseif type(message) == "string" and string.sub(message, 1, 13) == "CHEST_STATUS:" then
+            local incomingPct = tonumber(string.sub(message, 14)) or 0
+            
+            -- Find the machine group that owns this channel and update its tracking variable
+            for _, mach in ipairs(network) do
+                for _, block in ipairs(mach.blocks) do
+                    if block.channel == channel then
+                        if mach.chestPercent ~= incomingPct then
+                            mach.chestPercent = incomingPct
+                            render() -- Live refresh the monitor screen automatically!
+                        end
+                        break
                     end
                 end
             end
