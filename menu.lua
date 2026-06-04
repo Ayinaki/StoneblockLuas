@@ -30,15 +30,14 @@ local currentPage = "MAIN"
 local hitboxes = {}
 
 -- ==========================================
--- PERSISTENCE ENGINE (Save/Load Logic)
+-- FIXED PERSISTENCE ENGINE (With Absolute Paths)
 -- ==========================================
-local SAVE_FILE = "button_states.txt"
+local SAVE_FILE = "/button_states.txt" -- Added forward slash to force root directory
 
 local function saveStates()
     local file = fs.open(SAVE_FILE, "w")
     for _, mach in ipairs(network) do
         for _, block in ipairs(mach.blocks) do
-            -- Save each channel number and its true/false state
             file.writeLine(block.channel .. ":" .. tostring(block.active))
         end
     end
@@ -46,14 +45,19 @@ local function saveStates()
 end
 
 local function loadStates()
-    if not fs.exists(SAVE_FILE) then return end
+    if not fs.exists(SAVE_FILE) then 
+        print("No save file found yet. Creating fresh states.")
+        return 
+    end
+    
+    -- Give modems 2 seconds to connect to the network before blasting signals
+    print("Waking up modems...")
+    os.sleep(2) 
     
     local file = fs.open(SAVE_FILE, "r")
     local line = file.readLine()
     
-    -- Read the file line by line
     while line do
-        -- Split the line at the colon (e.g., "101:true")
         local parts = {}
         for match in string.gmatch(line, "[^:]+") do
             table.insert(parts, match)
@@ -62,14 +66,13 @@ local function loadStates()
         local channel = tonumber(parts[1])
         local active = (parts[2] == "true")
         
-        -- Find the matching channel in our network and restore it
         for _, mach in ipairs(network) do
             for _, block in ipairs(mach.blocks) do
                 if block.channel == channel then
                     block.active = active
-                    -- Instantly broadcast the signal so receivers catch it on startup!
                     local signal = active and "ON" or "OFF"
                     modem.transmit(channel, channel, signal)
+                    print("Restored channel " .. channel .. " to " .. tostring(active))
                 end
             end
         end
@@ -159,7 +162,6 @@ local function drawSubPage(machName)
             local signal = block.active and "ON" or "OFF"
             modem.transmit(block.channel, block.channel, signal)
             
-            -- SAVE STATES ON CLICK
             saveStates()
         end)
         
@@ -175,7 +177,7 @@ local function render()
     end
 end
 
--- LOAD CACHED STATES AND RE-BROADCAST ON BOOT
+-- LOAD AND TRANSMIT BACKED UP SIGNALS
 loadStates()
 render()
 
