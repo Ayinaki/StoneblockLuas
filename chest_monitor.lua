@@ -1,7 +1,25 @@
--- STANDALONE WIRELESS VILLAGER CHEST MONITOR
-local VILLAGER_NAME = "Archaeologist" -- Explicitly tags who this chest belongs to
+-- STANDALONE WIRELESS VILLAGER CHEST MONITOR (UNIVERSAL)
+local CONFIG_FILE = "/config.txt"
+
+-- Default settings if config file doesn't exist yet
+local VILLAGER_NAME = "Archaeologist"
 local CHANNELS_TO_PROTECT = { 101, 102, 103 }
 local CHEST_SIDE = "top" 
+
+-- Load custom configuration from local drive if it exists
+if fs.exists(CONFIG_FILE) then
+    local file = fs.open(CONFIG_FILE, "r")
+    VILLAGER_NAME = file.readLine() or VILLAGER_NAME
+    
+    local channelLine = file.readLine()
+    if channelLine then
+        CHANNELS_TO_PROTECT = {}
+        for channel in string.gmatch(channelLine, "[^, ]+") do
+            table.insert(CHANNELS_TO_PROTECT, tonumber(channel))
+        end
+    end
+    file.close()
+end
 
 local modem = peripheral.find("modem") or error("No wireless/ender modem found!")
 print("----------------------------------------")
