@@ -29,21 +29,26 @@ if mon.isColor() then
     mon.setPaletteColor(colors.pink,      0x58A6FF) -- Key text
 end
 
-local currentPage = "LIST"
+local currentPage = "TREE"
 local hitboxes = {}
 local todoList = {}
 local currentInput = ""
 local SAVE_FILE = "/todo_items.txt"
+
 local scrollOffset = 0
-local currentPath = {}
+local selectedPath = nil
+local inputTargetPath = nil
 
 -- ==========================================
 -- DATA STORAGE
 -- ==========================================
 local function ensureTaskShape(task)
     if type(task) ~= "table" then return nil end
+
     task.text = tostring(task.text or "Untitled")
     task.done = task.done == true
+    task.expanded = task.expanded ~= false
+
     if type(task.subtasks) ~= "table" then
         task.subtasks = {}
     end
@@ -62,10 +67,13 @@ end
 
 local function normalizeTaskList(list)
     if type(list) ~= "table" then return {} end
+
     local out = {}
     for _, task in ipairs(list) do
         local fixed = ensureTaskShape(task)
-        if fixed then table.insert(out, fixed) end
+        if fixed then
+            table.insert(out, fixed)
+        end
     end
     return out
 end
@@ -97,7 +105,7 @@ local function loadTasks()
 end
 
 -- ==========================================
--- HELPERS
+-- UI HELPERS
 -- ==========================================
 local function registerHitbox(x1, x2, y1, y2, callback)
     table.insert(hitboxes, { x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback })
@@ -137,23 +145,32 @@ local function truncate(str, maxLen)
     return str
 end
 
-local function getCurrentList()
-    local list = todoList
-    for _, index in ipairs(currentPath) do
-        if not list[index] or type(list[index].subtasks) ~= "table" then
-            return todoList
+local function copyPath(path)
+    local newPath = {}
+    if path then
+        for i, v in ipairs(path) do
+            newPath[i] = v
         end
-        list = list[index].subtasks
     end
-    return list
+    return newPath
 end
 
-local function getCurrentTask()
-    if #currentPath == 0 then return nil end
+local function pathEquals(a, b)
+    if a == nil or b == nil then return false end
+    if #a ~= #b then return false end
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
+end
+
+local function getTaskByPath(path)
+    if not path then return nil end
+
     local list = todoList
     local task = nil
 
-    for _, index in ipairs(currentPath) do
+    for _, index in ipairs(path) do
         task = list[index]
         if not task then return nil end
         list = task.subtasks or {}
@@ -162,34 +179,19 @@ local function getCurrentTask()
     return task
 end
 
-local function buildPathLabel()
-    if #currentPath == 0 then
-        return "ROOT"
+local function getListAndIndexByPath(path)
+    if not path or #path == 0 then
+        return todoList, nil
     end
 
-    local parts = { "ROOT" }
     local list = todoList
-    for _, index in ipairs(currentPath) do
-        local task = list[index]
-        if not task then break end
-        table.insert(parts, task.text)
+    for i = 1, #path - 1 do
+        local task = list[path[i]]
+        if not task then return nil, nil end
         list = task.subtasks or {}
     end
 
-    return table.concat(parts, " > ")
-end
-
-local function countDoneRecursive(task)
-    local total = 1
-    local done = task.done and 1 or 0
-
-    for _, child in ipairs(task.subtasks or {}) do
-        local childDone, childTotal = countDoneRecursive(child)
-        done = done + childDone
-        total = total + childTotal
-    end
-
-    return done, total
+    return list, path[#path]
 end
 
 local function setTaskDoneRecursive(task, value)
@@ -215,115 +217,195 @@ local function refreshParentStates(list)
     end
 end
 
-local function getVisibleStats(list)
-    local done = 0
-    local total = #list
-    for _, task in ipairs(list) do
-        if task.done then done = done + 1 end
+local function countVisibleDone(list)
+    local done, total = 0, 0
+    local function walk(tasks)
+        for _, task in ipairs(tasks) do
+            total = total + 1
+            if task.done then done = done + 1 end
+            if task.expanded and task.subtasks and #task.subtasks > 0 then
+                walk(task.subtasks)
+            end
+        end
     end
+    walk(list)
     return done, total
 end
 
-local function addTaskToCurrentList(text)
-    local list = getCurrentList()
-    table.insert(list, {
-        text = text,
-        done = false,
-        subtasks = {}
-    })
-    refreshParentStates(todoList)
-    saveTasks()
+local function flattenVisibleTree(tasks, depth, prefixFlags, out, parentPath)
+    out = out or {}
+    parentPath = parentPath or {}
+    prefixFlags = prefixFlags or {}
+
+    for i, task in ipairs(tasks) do
+        local path = copyPath(parentPath)
+        table.insert(path, i)
+
+        local isLast = (i == #tasks)
+        table.insert(out, {
+            task = task,
+            depth = depth,
+            path = path,
+            prefixFlags = copyPath(prefixFlags),
+            isLast = isLast
+        })
+
+        if task.expanded and task.subtasks and #task.subtasks > 0 then
+            local childPrefixFlags = copyPath(prefixFlags)
+            table.insert(childPrefixFlags, not isLast)
+            flattenVisibleTree(task.subtasks, depth + 1, childPrefixFlags, out, path)
+        end
+    end
+
+    return out
 end
 
-local function removeTaskAt(list, idx)
-    table.remove(list, idx)
-    refreshParentStates(todoList)
-    saveTasks()
+local function buildTreePrefix(row)
+    if row.depth <= 0 then return "" end
+
+    local parts = {}
+    for i = 1, row.depth - 1 do
+        if row.prefixFlags[i] then
+            table.insert(parts, "\179 ")
+        else
+            table.insert(parts, "  ")
+        end
+    end
+
+    if row.isLast then
+        table.insert(parts, "\192 ")
+    else
+        table.insert(parts, "\195 ")
+    end
+
+    return table.concat(parts)
 end
 
-local function toggleTaskAt(list, idx)
-    local task = list[idx]
-    if not task then return end
-
-    local newState = not task.done
-    setTaskDoneRecursive(task, newState)
-    refreshParentStates(todoList)
-    saveTasks()
-end
-
-local function openTask(idx)
-    table.insert(currentPath, idx)
-    scrollOffset = 0
-end
-
-local function goBack()
-    if #currentPath > 0 then
-        table.remove(currentPath, #currentPath)
-        scrollOffset = 0
+local function ensureSelectionIsValid()
+    if selectedPath and not getTaskByPath(selectedPath) then
+        selectedPath = nil
+    end
+    if inputTargetPath and not getTaskByPath(inputTargetPath) then
+        inputTargetPath = nil
     end
 end
 
+local function addTask(text)
+    local newTask = {
+        text = text,
+        done = false,
+        expanded = true,
+        subtasks = {}
+    }
+
+    if inputTargetPath then
+        local parent = getTaskByPath(inputTargetPath)
+        if parent then
+            parent.expanded = true
+            table.insert(parent.subtasks, newTask)
+        else
+            table.insert(todoList, newTask)
+        end
+    else
+        table.insert(todoList, newTask)
+    end
+
+    refreshParentStates(todoList)
+    saveTasks()
+end
+
+local function removeTask(path)
+    local list, idx = getListAndIndexByPath(path)
+    if list and idx and list[idx] then
+        table.remove(list, idx)
+        refreshParentStates(todoList)
+        saveTasks()
+    end
+
+    if selectedPath and pathEquals(selectedPath, path) then
+        selectedPath = nil
+    end
+end
+
+local function toggleDone(path)
+    local task = getTaskByPath(path)
+    if not task then return end
+
+    setTaskDoneRecursive(task, not task.done)
+    refreshParentStates(todoList)
+    saveTasks()
+end
+
+local function toggleExpanded(path)
+    local task = getTaskByPath(path)
+    if not task then return end
+    if task.subtasks and #task.subtasks > 0 then
+        task.expanded = not task.expanded
+        saveTasks()
+    end
+end
+
+local function startAddMode()
+    currentInput = ""
+    inputTargetPath = selectedPath and copyPath(selectedPath) or nil
+    currentPage = "KEYBOARD"
+end
+
 -- ==========================================
--- MAIN LIST VIEW
+-- TREE VIEW
 -- ==========================================
-local function drawListPage()
+local function drawTreePage()
     mon.setBackgroundColor(colors.black)
     mon.clear()
     hitboxes = {}
 
+    ensureSelectionIsValid()
+
     local w, h = mon.getSize()
-    local currentList = getCurrentList()
+    local rows = flattenVisibleTree(todoList)
+    local doneCount, totalCount = countVisibleDone(todoList)
 
     -- Header
     fill(1, 1, w, 3, colors.gray)
+    writeAt(2, 1, "TODO TREE", colors.cyan, colors.gray)
+    writeAt(2, 2, doneCount .. "/" .. totalCount .. " visible done", colors.orange, colors.gray)
 
-    local title = (#currentPath == 0) and "TODO LIST" or "SUBTASKS"
-    writeAt(2, 1, title, colors.cyan, colors.gray)
-
-    local pathLabel = truncate(buildPathLabel(), w - 4)
-    writeAt(2, 2, pathLabel, colors.yellow, colors.gray)
-
-    local doneCount, totalCount = getVisibleStats(currentList)
-    local countStr = doneCount .. "/" .. totalCount .. " done"
-    writeAt(2, 3, truncate(countStr, math.floor(w / 2)), colors.orange, colors.gray)
-
-    -- Buttons
-    local addLabel = "+ Add"
-    local openRootLabel = (#currentPath > 0) and "< Back" or nil
-
-    local rightX = w - #addLabel - 2
-    writeAt(rightX, 1, " " .. addLabel .. " ", colors.black, colors.cyan)
-    registerHitbox(rightX, rightX + #addLabel + 1, 1, 1, function()
-        playTone(true)
-        currentInput = ""
-        currentPage = "KEYBOARD"
-    end)
-
-    if openRootLabel then
-        writeAt(w - #openRootLabel - 3, 2, " " .. openRootLabel .. " ", colors.white, colors.red)
-        registerHitbox(w - #openRootLabel - 3, w - 1, 2, 2, function()
-            playTone(true)
-            goBack()
-        end)
+    local targetLabel
+    if inputTargetPath then
+        local t = getTaskByPath(inputTargetPath)
+        targetLabel = t and ("Add to: " .. t.text) or "Add to: ROOT"
+    elseif selectedPath then
+        local t = getTaskByPath(selectedPath)
+        targetLabel = t and ("Selected: " .. t.text) or "Selected: ROOT"
+    else
+        targetLabel = "Selected: ROOT"
     end
+    writeAt(2, 3, truncate(targetLabel, w - 4), colors.yellow, colors.gray)
+
+    -- Right buttons
+    local addLabel = "+ Add"
+    local addX = w - #addLabel - 2
+    writeAt(addX, 1, " " .. addLabel .. " ", colors.black, colors.cyan)
+    registerHitbox(addX, addX + #addLabel + 1, 1, 1, function()
+        playTone(true)
+        startAddMode()
+    end)
 
     -- Divider
     fill(1, 4, w, 1, colors.lightGray)
     writeAt(2, 4, string.rep("-", math.max(1, w - 2)), colors.gray, colors.lightGray)
 
-    -- Empty state
-    if #currentList == 0 then
-        local msg1 = (#currentPath == 0) and "Nothing here yet!" or "No subtasks yet!"
-        local msg2 = (#currentPath == 0) and "Tap '+ Add' to create a task" or "Tap '+ Add' to create a subtask"
+    if #rows == 0 then
+        local msg1 = "Nothing here yet!"
+        local msg2 = "Tap '+ Add' to create a root task"
         writeAt(math.floor((w - #msg1) / 2) + 1, 7, msg1, colors.lightGray, colors.black)
         writeAt(math.floor((w - #msg2) / 2) + 1, 8, msg2, colors.gray, colors.black)
         return
     end
 
-    -- Scroll
     local listStartY = 5
     local listH = h - listStartY
-    local maxScroll = math.max(0, #currentList - listH)
+    local maxScroll = math.max(0, #rows - listH)
     scrollOffset = math.min(scrollOffset, maxScroll)
 
     if scrollOffset > 0 then
@@ -340,58 +422,64 @@ local function drawListPage()
         end)
     end
 
-    -- Rows
-    for i = 1 + scrollOffset, math.min(#currentList, listH + scrollOffset) do
-        local task = currentList[i]
-        local rowY = listStartY + (i - 1 - scrollOffset)
-        local rowBg = (i % 2 == 0) and colors.gray or colors.black
-        fill(1, rowY, w, 1, rowBg)
+    for visibleIndex = 1 + scrollOffset, math.min(#rows, listH + scrollOffset) do
+        local row = rows[visibleIndex]
+        local task = row.task
+        local y = listStartY + (visibleIndex - 1 - scrollOffset)
+
+        local isSelected = selectedPath and pathEquals(selectedPath, row.path)
+        local rowBg = isSelected and colors.lightGray or (((visibleIndex % 2) == 0) and colors.gray or colors.black)
+        fill(1, y, w, 1, rowBg)
 
         -- Checkbox
-        local cbSymbol = task.done and "[v]" or "[ ]"
+        local cbText = task.done and "[v]" or "[ ]"
         local cbColor = task.done and colors.lime or colors.red
-        writeAt(2, rowY, cbSymbol, cbColor, rowBg)
-
-        local idx = i
-        registerHitbox(2, 4, rowY, rowY, function()
+        writeAt(2, y, cbText, cbColor, rowBg)
+        local pathCopy1 = copyPath(row.path)
+        registerHitbox(2, 4, y, y, function()
             playTone(false)
-            toggleTaskAt(currentList, idx)
+            toggleDone(pathCopy1)
         end)
-
-        -- Child marker
-        local childCount = #(task.subtasks or {})
-        local childLabel = childCount > 0 and ("{" .. childCount .. "}") or ""
-        local childLabelW = #childLabel
 
         -- Delete button
         local delText = " Del "
         local delX = w - #delText - 1
-        writeAt(delX, rowY, delText, colors.white, colors.red)
-        registerHitbox(delX, delX + #delText - 1, rowY, rowY, function()
+        writeAt(delX, y, delText, colors.white, colors.red)
+        local pathCopy2 = copyPath(row.path)
+        registerHitbox(delX, delX + #delText - 1, y, y, function()
             playTone(true)
-            removeTaskAt(currentList, idx)
-            scrollOffset = math.min(scrollOffset, math.max(0, #currentList - listH))
+            removeTask(pathCopy2)
         end)
 
-        -- Open button
-        local openText = " > "
-        local openX = delX - #openText - 1
-        writeAt(openX, rowY, openText, colors.black, colors.cyan)
-        registerHitbox(openX, openX + #openText - 1, rowY, rowY, function()
-            playTone(true)
-            openTask(idx)
-        end)
-
-        -- Text
-        local textFg = task.done and colors.white or colors.white
-        if childCount > 0 then
-            writeAt(6, rowY, childLabel, colors.yellow, rowBg)
+        -- Expand/collapse marker
+        local treePrefix = buildTreePrefix(row)
+        local marker = " "
+        if task.subtasks and #task.subtasks > 0 then
+            marker = task.expanded and "-" or "+"
         end
 
-        local textStart = 6 + childLabelW + (childCount > 0 and 1 or 0)
-        local maxTextW = openX - textStart - 1
-        local label = truncate(task.text, maxTextW)
-        writeAt(textStart, rowY, label, textFg, rowBg)
+        local lineStart = 6
+        local treeText = treePrefix .. marker .. " "
+        local maxTextW = delX - lineStart - 1
+        local label = truncate(treeText .. task.text, maxTextW)
+
+        local textColor = task.done and colors.white or colors.white
+        if isSelected then
+            textColor = colors.yellow
+        end
+
+        writeAt(lineStart, y, label, textColor, rowBg)
+
+        -- Select / open hitbox across row text
+        local pathCopy3 = copyPath(row.path)
+        registerHitbox(lineStart, delX - 1, y, y, function()
+            playTone(false)
+            if selectedPath and pathEquals(selectedPath, pathCopy3) then
+                toggleExpanded(pathCopy3)
+            else
+                selectedPath = pathCopy3
+            end
+        end)
     end
 end
 
@@ -406,8 +494,14 @@ local function drawKeyboardPage()
     local w, h = mon.getSize()
 
     fill(1, 1, w, 3, colors.gray)
-    writeAt(2, 1, (#currentPath == 0) and "New task:" or "New subtask:", colors.orange, colors.gray)
-    writeAt(2, 2, truncate(buildPathLabel(), w - 4), colors.yellow, colors.gray)
+    writeAt(2, 1, "New task:", colors.orange, colors.gray)
+
+    local targetName = "ROOT"
+    if inputTargetPath then
+        local parent = getTaskByPath(inputTargetPath)
+        if parent then targetName = parent.text end
+    end
+    writeAt(2, 2, truncate("Parent: " .. targetName, w - 4), colors.yellow, colors.gray)
 
     local displayInput = currentInput
     if #displayInput > w - 6 then
@@ -439,6 +533,7 @@ local function drawKeyboardPage()
 
         for _, key in ipairs(row) do
             local label = (key == " ") and "SPC" or key
+
             fill(startX, rowY, kw, kh, colors.lightGray)
             local lx = startX + math.floor((kw - #label) / 2)
             writeAt(lx, rowY, label, colors.white, colors.lightGray)
@@ -465,6 +560,16 @@ local function drawKeyboardPage()
         currentInput = currentInput:sub(1, -2)
     end)
 
+    -- Root
+    local rootLabel = "ROOT"
+    local rootX = math.floor(w / 2) - 10
+    fill(rootX - 1, bY, #rootLabel + 2, 1, colors.blue)
+    writeAt(rootX, bY, rootLabel, colors.white, colors.blue)
+    registerHitbox(rootX - 1, rootX + #rootLabel, bY, bY, function()
+        playTone(false)
+        inputTargetPath = nil
+    end)
+
     -- Cancel
     local canLabel = "CANCEL"
     local canX = math.floor(w / 2) - math.floor(#canLabel / 2)
@@ -472,8 +577,8 @@ local function drawKeyboardPage()
     writeAt(canX, bY, canLabel, colors.white, colors.red)
     registerHitbox(canX - 1, canX + #canLabel, bY, bY, function()
         playTone(true)
-        currentPage = "LIST"
         currentInput = ""
+        currentPage = "TREE"
     end)
 
     -- Add
@@ -485,9 +590,9 @@ local function drawKeyboardPage()
         local trimmed = currentInput:gsub("^%s+", ""):gsub("%s+$", "")
         if trimmed ~= "" then
             playTone(true)
-            addTaskToCurrentList(trimmed)
+            addTask(trimmed)
             currentInput = ""
-            currentPage = "LIST"
+            currentPage = "TREE"
         end
     end)
 end
@@ -496,8 +601,8 @@ end
 -- RENDER
 -- ==========================================
 local function render()
-    if currentPage == "LIST" then
-        drawListPage()
+    if currentPage == "TREE" then
+        drawTreePage()
     else
         drawKeyboardPage()
     end
