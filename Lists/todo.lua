@@ -7,17 +7,18 @@ mon.setTextScale(1)
 mon.clear()
 
 -- ==========================================
--- THEME & PALETTE INITIALIZATION
+-- HIGH-TECH INDUSTRIAL PALETTE
 -- ==========================================
 if mon.isColor() then
-    mon.setPaletteColor(colors.gray,      0x1F2937) -- Dark Charcoal Canvas
-    mon.setPaletteColor(colors.lightGray, 0x4B5563) -- Slate Row Strips
-    mon.setPaletteColor(colors.cyan,      0x06B6D4) -- Neon Add Button Accent
-    mon.setPaletteColor(colors.lime,      0x10B981) -- Cyber Emerald Green
-    mon.setPaletteColor(colors.red,       0xEF4444) -- Crimson Alert Red
+    mon.setPaletteColor(colors.gray,      0x0F172A) -- Slate Dark Canvas (Deep Blue/Black)
+    mon.setPaletteColor(colors.lightGray, 0x1E293B) -- Subtle Panel Background Rows
+    mon.setPaletteColor(colors.cyan,      0x0EA5E9) -- Electric Blue Accent (Add Button)
+    mon.setPaletteColor(colors.lime,      0x10B981) -- Emerald Green (Done)
+    mon.setPaletteColor(colors.red,       0xF43F5E) -- Rose Crimson Red (Pending/Delete)
+    mon.setPaletteColor(colors.orange,    0xF59E0B) -- Amber Accent
 end
 
-local currentPage = "LIST" -- "LIST" or "KEYBOARD"
+local currentPage = "LIST"
 local hitboxes = {}
 local todoList = {}
 local currentInput = ""
@@ -36,7 +37,6 @@ end
 
 local function loadTasks()
     if not fs.exists(SAVE_FILE) then
-        -- Default startup sample items if no file exists yet
         todoList = {
             { text = "Refill Soulsand input bin", done = false },
             { text = "Expand Geologist chest space", done = true },
@@ -58,7 +58,7 @@ local function loadTasks()
 end
 
 -- ==========================================
--- UI DRAWING GENERATORS
+-- UI DRAWING HELPERS
 -- ==========================================
 local function registerHitbox(x1, x2, y1, y2, callback)
     table.insert(hitboxes, { x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback })
@@ -79,7 +79,6 @@ local function writeAt(x, y, text, fg, bg)
     mon.write(text)
 end
 
--- Audio clicker chimes
 local function playTone(isAction)
     if not speaker then return end
     pcall(function()
@@ -88,7 +87,7 @@ local function playTone(isAction)
         else 
             speaker.playNote("harp", 0.7, 5) 
         end
-    end) -- FIXED: Safely closed the pcall function block here
+    end)
 end
 
 local function drawButton(x, y, width, height, text, mainColor, textColor)
@@ -96,12 +95,12 @@ local function drawButton(x, y, width, height, text, mainColor, textColor)
     local tx = x + math.max(0, math.floor((width - #text) / 2))
     local ty = y + math.floor(height / 2)
     writeAt(tx, ty, text, textColor, mainColor)
-    mon.setBackgroundColor(colors.black)
+    mon.setBackgroundColor(colors.gray)
     mon.setTextColor(colors.white)
 end
 
 -- ==========================================
--- MAIN VIEW: TRACKING LIST
+-- REDESIGNED MAIN VIEW: TASK BOARD
 -- ==========================================
 local function drawListPage()
     mon.setBackgroundColor(colors.gray)
@@ -109,55 +108,51 @@ local function drawListPage()
     hitboxes = {}
     local w, h = mon.getSize()
 
-    -- Header bar panel
+    -- Flat, Modern Header Accent Line
     fill(1, 1, w, 2, colors.lightGray)
-    writeAt(2, 1, "FACTORY TASK LIST", colors.white, colors.lightGray)
-    writeAt(2, 2, "STATUS & PLANNED LOGS", colors.black, colors.lightGray)
+    writeAt(2, 1, "FACTORY OPERATIONS PROTOCOL", colors.cyan, colors.lightGray)
+    writeAt(2, 2, "ACTIVE DEVELOPMENT LOGS", colors.orange, colors.lightGray)
 
-    -- Sizable Top-Right [+] ADD button
-    local abw = 5
+    -- Sleek Premium [+ ADD] Toggle Box
+    local abw = 11
     local abx = w - abw - 1
-    fill(abx, 1, abw, 2, colors.cyan)
-    writeAt(abx + 1, 1, "[ + ]", colors.white, colors.cyan)
-    writeAt(abx + 1, 2, " ADD ", colors.white, colors.cyan)
-    
+    drawButton(abx, 1, abw, 2, "[+ TASK]", colors.cyan, colors.gray)
     registerHitbox(abx, abx + abw - 1, 1, 2, function()
         playTone(true)
         currentInput = ""
         currentPage = "KEYBOARD"
     end)
 
-    -- Item List Loop Rendering
+    -- Item Rendering Loop
     local startY = 4
     for i, task in ipairs(todoList) do
-        if startY + 2 > h then break end -- Scroll guard
+        if startY + 2 > h then break end
 
-        -- 1. Checkbox Box Button
-        local cbColor = task.done and colors.lime or colors.red
-        local cbText  = task.done and "[X]" or "[ ]"
-        fill(2, startY, 5, 2, cbColor)
-        writeAt(3, startY, cbText, task.done and colors.black or colors.white, cbColor)
+        -- Seamless row background panel
+        fill(2, startY, w - 2, 2, colors.lightGray)
+
+        -- 1. Status Indicator Toggle Area
+        local statusText = task.done and " DONE " or " PNDG "
+        local statusBg   = task.done and colors.lime or colors.red
+        local statusFg   = task.done and colors.gray or colors.white
+        drawButton(3, startY, 8, 2, statusText, statusBg, statusFg)
         
         local idx = i
-        registerHitbox(2, 6, startY, startY + 1, function()
+        registerHitbox(3, 10, startY, startY + 1, function()
             playTone(false)
             todoList[idx].done = not todoList[idx].done
             saveTasks()
         end)
 
-        -- 2. Text Description Card Label
-        local txtBg = task.done and colors.lightGray or colors.black
-        local txtFg = task.done and colors.gray or colors.white
-        fill(8, startY, w - 14, 2, txtBg)
-        writeAt(10, startY, string.sub(task.text, 1, w - 16), txtFg, txtBg)
+        -- 2. Elegant Descriptive Text String
+        local textFg = task.done and colors.orange or colors.white
+        writeAt(13, startY, string.sub(task.text, 1, w - 23), textFg, colors.lightGray)
+        writeAt(13, startY + 1, "INDEX LOG #" .. string.format("%02d", i), colors.gray, colors.lightGray)
 
-        -- 3. Inline Trash Delete Button [!]
-        local delX = w - 5
-        fill(delX, startY, 4, 2, colors.red)
-        writeAt(delX + 1, startY, "[!]", colors.white, colors.red)
-        writeAt(delX + 1, startY + 1, "DEL", colors.white, colors.red)
-        
-        registerHitbox(delX, delX + 3, startY, startY + 1, function()
+        -- 3. Crimson Minimalist Delete Action Option
+        local delX = w - 8
+        drawButton(delX, startY, 7, 2, "CLEAR", colors.red, colors.white)
+        registerHitbox(delX, delX + 6, startY, startY + 1, function()
             playTone(true)
             table.remove(todoList, idx)
             saveTasks()
@@ -168,20 +163,19 @@ local function drawListPage()
 end
 
 -- ==========================================
--- SUB VIEW: ON-SCREEN OS KEYBOARD OVERLAY
+-- ON-SCREEN KEYBOARD OVERLAY
 -- ==========================================
 local function drawKeyboardPage()
-    mon.setBackgroundColor(colors.black)
+    mon.setBackgroundColor(colors.gray)
     mon.clear()
     hitboxes = {}
     local w, h = mon.getSize()
 
-    -- Live Input Value Bar
-    fill(1, 1, w, 2, colors.gray)
-    writeAt(2, 1, "ENTER TASK NAME:", colors.yellow, colors.gray)
-    writeAt(2, 2, "> " .. currentInput .. "_", colors.white, colors.gray)
+    -- Live Input Terminal
+    fill(1, 1, w, 2, colors.lightGray)
+    writeAt(2, 1, "SYSTEM DIALOG INPUT REQUEST:", colors.orange, colors.lightGray)
+    writeAt(2, 2, ">> " .. currentInput .. "_", colors.white, colors.lightGray)
 
-    -- Keyboard Layout Mapping rows
     local rows = {
         { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0" },
         { "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P" },
@@ -189,8 +183,8 @@ local function drawKeyboardPage()
         { "Z", "X", "C", "V", "B", "N", "M", ",", ".", " " }
     }
 
-    local kw = 3 -- Individual key block width scale
-    local kh = 2 -- Individual key block height scale
+    local kw = 3
+    local kh = 2
     local startY = 4
 
     for rIdx, row in ipairs(rows) do
@@ -204,7 +198,7 @@ local function drawKeyboardPage()
             local capturedKey = key
             registerHitbox(startX, startX + kw - 1, startY, startY + kh - 1, function()
                 playTone(false)
-                if #currentInput < w - 16 then
+                if #currentInput < w - 23 then
                     currentInput = currentInput .. capturedKey
                 end
             end)
@@ -213,27 +207,26 @@ local function drawKeyboardPage()
         startY = startY + kh + 1
     end
 
-    -- Bottom Master Utility Controls Array
     local btnY = h - 2
     
-    -- Backspace Left Arrow
-    drawButton(2, btnY, 6, 2, "[<-]", colors.orange, colors.white)
+    -- Backspace
+    drawButton(2, btnY, 6, 2, "[<-]", colors.orange, colors.gray)
     registerHitbox(2, 7, btnY, btnY + 1, function()
         playTone(false)
         currentInput = string.sub(currentInput, 1, #currentInput - 1)
     end)
 
-    -- Cancel Operational Reset
-    drawButton(9, btnY, 8, 2, "CANCEL", colors.red, colors.white)
+    -- Cancel
+    drawButton(9, btnY, 8, 2, "ABORT", colors.red, colors.white)
     registerHitbox(9, 16, btnY, btnY + 1, function()
         playTone(true)
         currentPage = "LIST"
     end)
 
-    -- Save/Confirm Target Item Commit
-    local svX = w - 9
-    drawButton(svX, btnY, 8, 2, "SAVE", colors.lime, colors.black)
-    registerHitbox(svX, svX + 7, btnY, btnY + 1, function()
+    -- Save
+    local svX = w - 11
+    drawButton(svX, btnY, 10, 2, "COMMIT", colors.lime, colors.gray)
+    registerHitbox(svX, svX + 9, btnY, btnY + 1, function()
         if currentInput ~= "" then
             playTone(true)
             table.insert(todoList, { text = currentInput, done = false })
@@ -244,11 +237,11 @@ local function drawKeyboardPage()
 end
 
 local function render()
-    if currentPage == "LIST" then drawListPage() else drawKeyboardPage() end
+    if currentPage == "LIST" then drawMainPage = drawListPage drawListPage() else drawKeyboardPage() end
 end
 
 -- ==========================================
--- PROCESS EXECUTION SYSTEM INITIALIZER
+-- SYSTEM STARTUP INITIALIZER
 -- ==========================================
 loadTasks()
 render()
