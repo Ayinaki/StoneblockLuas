@@ -43,6 +43,7 @@ local inputTargetPath = nil
 local inputMode = "ADD"
 local editingPath = nil
 local deleteTargetPath = nil
+local deleteTargetListName = "ACTIVE"
 
 -- ==========================================
 -- DATA STORAGE
@@ -362,8 +363,12 @@ local function ensureSelectionIsValid()
     if editingPath and not getTaskByPath(editingPath, todoList) then
         editingPath = nil
     end
-    if deleteTargetPath and not getTaskByPath(deleteTargetPath, todoList) then
-        deleteTargetPath = nil
+    if deleteTargetPath then
+        local root = (deleteTargetListName == "ARCHIVE") and archiveList or todoList
+        if not getTaskByPath(deleteTargetPath, root) then
+            deleteTargetPath = nil
+            deleteTargetListName = "ACTIVE"
+        end
     end
 end
 
@@ -398,15 +403,21 @@ local function editTask(path, newText)
     saveTasks()
 end
 
-local function removeTask(path)
-    local list, idx = getListAndIndexByPath(path, todoList)
+local function removeTask(path, listRoot)
+    local root = listRoot or todoList
+    local list, idx = getListAndIndexByPath(path, root)
+
     if list and idx and list[idx] then
         table.remove(list, idx)
-        refreshParentStates(todoList)
+        if root == todoList then
+            refreshParentStates(todoList)
+        else
+            refreshParentStates(archiveList)
+        end
         saveTasks()
     end
 
-    if selectedPath and pathEquals(selectedPath, path) then
+    if root == todoList and selectedPath and pathEquals(selectedPath, path) then
         selectedPath = nil
     end
 end
@@ -448,8 +459,9 @@ local function startEditMode(path)
     currentPage = "KEYBOARD"
 end
 
-local function startDeleteConfirm(path)
+local function startDeleteConfirm(path, listName)
     deleteTargetPath = copyPath(path)
+    deleteTargetListName = listName or "ACTIVE"
     currentPage = "DELETE_CONFIRM"
 end
 
@@ -507,7 +519,8 @@ local function drawGuidePage()
         "5. Tap Edit to rename a task.",
         "6. Tap Del to open confirm delete.",
         "7. Archive Done moves finished top",
-        "   level branches into archive."
+        "   level branches into archive.",
+        "8. Archive rows can also be deleted."
     }
 
     local startY = 4
@@ -580,6 +593,16 @@ local function drawArchivePage()
         local rowBg = ((visibleIndex % 2) == 0) and colors.gray or colors.black
         fill(1, y, w, 1, rowBg)
 
+        local delText = " Del "
+        local delX = w - #delText - 1
+        writeAt(delX, y, delText, colors.white, colors.red)
+
+        local pathCopy1 = copyPath(row.path)
+        registerHitbox(delX, delX + #delText - 1, y, y, function()
+            playTone(true)
+            startDeleteConfirm(pathCopy1, "ARCHIVE")
+        end)
+
         local treePrefix = buildTreePrefix(row)
         local marker = " "
         if task.subtasks and #task.subtasks > 0 then
@@ -592,7 +615,7 @@ local function drawArchivePage()
             suffix = " [" .. doneCount .. "/" .. totalCount .. "]"
         end
 
-        writeAt(2, y, truncate(treePrefix .. marker .. " " .. task.text .. suffix, w - 2), colors.lightGray, rowBg)
+        writeAt(2, y, truncate(treePrefix .. marker .. " " .. task.text .. suffix, delX - 3), colors.lightGray, rowBg)
     end
 end
 
@@ -605,7 +628,8 @@ local function drawDeleteConfirmPage()
     hitboxes = {}
 
     local w, h = mon.getSize()
-    local task = getTaskByPath(deleteTargetPath, todoList)
+    local root = (deleteTargetListName == "ARCHIVE") and archiveList or todoList
+    local task = getTaskByPath(deleteTargetPath, root)
 
     fill(1, 1, w, 3, colors.red)
     writeAt(2, 1, "CONFIRM DELETE", colors.white, colors.red)
@@ -616,14 +640,17 @@ local function drawDeleteConfirmPage()
         local backX = w - #backLabel - 1
         writeAt(backX, 1, backLabel, colors.white, colors.gray)
         registerHitbox(backX, backX + #backLabel - 1, 1, 1, function()
-            currentPage = "TREE"
+            currentPage = (deleteTargetListName == "ARCHIVE") and "ARCHIVE" or "TREE"
             deleteTargetPath = nil
+            deleteTargetListName = "ACTIVE"
         end)
         return
     end
 
     writeAt(2, 2, truncate(task.text, w - 4), colors.white, colors.red)
-    writeAt(2, 3, "Branch size: " .. countBranchSize(task) .. " task(s)", colors.white, colors.red)
+
+    local sourceText = (deleteTargetListName == "ARCHIVE") and "From: Archive" or "From: Active list"
+    writeAt(2, 3, truncate(sourceText .. " | Branch size: " .. countBranchSize(task), w - 4), colors.white, colors.red)
 
     local msg1 = "This will remove the selected task"
     local msg2 = "and all of its subtasks."
@@ -640,17 +667,25 @@ local function drawDeleteConfirmPage()
     registerHitbox(cancelX, cancelX + #cancelLabel - 1, by, by, function()
         playTone(false)
         deleteTargetPath = nil
-        currentPage = "TREE"
+        local nextPage = (deleteTargetListName == "ARCHIVE") and "ARCHIVE" or "TREE"
+        deleteTargetListName = "ACTIVE"
+        currentPage = nextPage
     end)
 
     writeAt(deleteX, by, deleteLabel, colors.white, colors.red)
     registerHitbox(deleteX, deleteX + #deleteLabel - 1, by, by, function()
         playTone(true)
         if deleteTargetPath then
-            removeTask(deleteTargetPath)
+            if deleteTargetListName == "ARCHIVE" then
+                removeTask(deleteTargetPath, archiveList)
+            else
+                removeTask(deleteTargetPath, todoList)
+            end
         end
+        local nextPage = (deleteTargetListName == "ARCHIVE") and "ARCHIVE" or "TREE"
         deleteTargetPath = nil
-        currentPage = "TREE"
+        deleteTargetListName = "ACTIVE"
+        currentPage = nextPage
     end)
 end
 
@@ -758,7 +793,7 @@ local function drawTreePage()
             local pathCopy2 = copyPath(row.path)
             registerHitbox(delX, delX + #delText - 1, y, y, function()
                 playTone(true)
-                startDeleteConfirm(pathCopy2)
+                startDeleteConfirm(pathCopy2, "ACTIVE")
             end)
 
             local editText = " Edit "
