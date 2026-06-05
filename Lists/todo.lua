@@ -318,11 +318,12 @@ local function hasCompletedTopLevelTasks()
     return false
 end
 
-local function flattenVisibleTree(tasks, depth, prefixFlags, out, parentPath)
+local function flattenVisibleTree(tasks, depth, prefixFlags, out, parentPath, addRootSpacing)
     out = out or {}
     depth = depth or 0
     prefixFlags = prefixFlags or {}
     parentPath = parentPath or {}
+    addRootSpacing = addRootSpacing == true
 
     for i, task in ipairs(tasks) do
         local path = copyPath(parentPath)
@@ -334,13 +335,21 @@ local function flattenVisibleTree(tasks, depth, prefixFlags, out, parentPath)
             depth = depth,
             path = path,
             prefixFlags = copyPath(prefixFlags),
-            isLast = isLast
+            isLast = isLast,
+            spacer = false
         })
 
         if task.expanded and task.subtasks and #task.subtasks > 0 then
             local childPrefixFlags = copyPath(prefixFlags)
             table.insert(childPrefixFlags, not isLast)
-            flattenVisibleTree(task.subtasks, depth + 1, childPrefixFlags, out, path)
+            flattenVisibleTree(task.subtasks, depth + 1, childPrefixFlags, out, path, false)
+        end
+
+        if addRootSpacing and depth == 0 and not isLast then
+            table.insert(out, {
+                spacer = true,
+                depth = 0
+            })
         end
     end
 
@@ -617,10 +626,10 @@ local function drawGuidePage()
         "3. Edit / Delete / Pri only show",
         "   when a task is selected.",
         "4. Unselect returns to ROOT.",
-        "5. Parent tasks show [done/total].",
+        "5. Root trees have blank spacing",
+        "   between each top-level branch.",
         "6. Sort can reorder the active tree.",
-        "7. Archive restores finished branches",
-        "   back into the active list."
+        "7. Archive restores finished branches."
     }
 
     local startY = 4
@@ -629,10 +638,6 @@ local function drawGuidePage()
         if y <= h then
             writeAt(2, y, truncate(line, w - 3), colors.white, colors.black)
         end
-    end
-
-    if h >= 15 then
-        writeAt(2, h - 1, "Tip: select a parent before adding.", colors.orange, colors.black)
     end
 end
 
@@ -735,7 +740,7 @@ local function drawArchivePage()
     hitboxes = {}
 
     local w, h = mon.getSize()
-    local rows = flattenVisibleTree(archiveList, 0, {}, {}, {})
+    local rows = flattenVisibleTree(archiveList, 0, {}, {}, {}, false)
 
     fill(1, 1, w, 2, colors.gray)
     writeAt(2, 1, "ARCHIVE", colors.cyan, colors.gray)
@@ -777,49 +782,53 @@ local function drawArchivePage()
 
     for visibleIndex = 1 + archiveScrollOffset, math.min(#rows, listH + archiveScrollOffset) do
         local row = rows[visibleIndex]
-        local task = row.task
         local y = listStartY + (visibleIndex - 1 - archiveScrollOffset)
 
-        local rowBg = ((visibleIndex % 2) == 0) and colors.gray or colors.black
-        fill(1, y, w, 1, rowBg)
+        if row.spacer then
+            fill(1, y, w, 1, colors.black)
+        else
+            local task = row.task
+            local rowBg = ((visibleIndex % 2) == 0) and colors.gray or colors.black
+            fill(1, y, w, 1, rowBg)
 
-        local delText = " Del "
-        local delX = w - #delText - 1
-        writeAt(delX, y, delText, colors.white, colors.red)
+            local delText = " Del "
+            local delX = w - #delText - 1
+            writeAt(delX, y, delText, colors.white, colors.red)
 
-        local restoreText = " Restore "
-        local restoreX = delX - #restoreText - 1
-        writeAt(restoreX, y, restoreText, colors.black, colors.lime)
+            local restoreText = " Restore "
+            local restoreX = delX - #restoreText - 1
+            writeAt(restoreX, y, restoreText, colors.black, colors.lime)
 
-        local pathCopy1 = copyPath(row.path)
-        registerHitbox(delX, delX + #delText - 1, y, y, function()
-            playTone(true)
-            startDeleteConfirm(pathCopy1, "ARCHIVE")
-        end)
+            local pathCopy1 = copyPath(row.path)
+            registerHitbox(delX, delX + #delText - 1, y, y, function()
+                playTone(true)
+                startDeleteConfirm(pathCopy1, "ARCHIVE")
+            end)
 
-        local pathCopy2 = copyPath(row.path)
-        registerHitbox(restoreX, restoreX + #restoreText - 1, y, y, function()
-            playTone(true)
-            restoreArchivedTask(pathCopy2)
-        end)
+            local pathCopy2 = copyPath(row.path)
+            registerHitbox(restoreX, restoreX + #restoreText - 1, y, y, function()
+                playTone(true)
+                restoreArchivedTask(pathCopy2)
+            end)
 
-        local treePrefix = buildTreePrefix(row)
-        local marker = " "
-        if task.subtasks and #task.subtasks > 0 then
-            marker = task.expanded and "-" or "+"
+            local treePrefix = buildTreePrefix(row)
+            local marker = " "
+            if task.subtasks and #task.subtasks > 0 then
+                marker = task.expanded and "-" or "+"
+            end
+
+            local doneCount, totalCount = countBranchProgress(task)
+            local suffix = ""
+            if task.subtasks and #task.subtasks > 0 then
+                suffix = " [" .. doneCount .. "/" .. totalCount .. "]"
+            end
+
+            local pri = "[" .. (task.priority or "MED") .. "] "
+            local priColor = priorityColor(task.priority or "MED")
+
+            writeAt(2, y, pri, priColor, rowBg)
+            writeAt(2 + #pri, y, truncate(treePrefix .. marker .. " " .. task.text .. suffix, restoreX - (3 + #pri)), colors.lightGray, rowBg)
         end
-
-        local doneCount, totalCount = countBranchProgress(task)
-        local suffix = ""
-        if task.subtasks and #task.subtasks > 0 then
-            suffix = " [" .. doneCount .. "/" .. totalCount .. "]"
-        end
-
-        local pri = "[" .. (task.priority or "MED") .. "] "
-        local priColor = priorityColor(task.priority or "MED")
-
-        writeAt(2, y, pri, priColor, rowBg)
-        writeAt(2 + #pri, y, truncate(treePrefix .. marker .. " " .. task.text .. suffix, restoreX - (3 + #pri)), colors.lightGray, rowBg)
     end
 end
 
@@ -904,7 +913,7 @@ local function drawTreePage()
     ensureSelectionIsValid()
 
     local w, h = mon.getSize()
-    local rows = flattenVisibleTree(todoList, 0, {}, {}, {})
+    local rows = flattenVisibleTree(todoList, 0, {}, {}, {}, true)
     local doneCount, totalCount = countVisibleDone(todoList)
 
     fill(1, 1, w, 3, colors.gray)
@@ -999,65 +1008,70 @@ local function drawTreePage()
 
         for visibleIndex = 1 + scrollOffset, math.min(#rows, listH + scrollOffset) do
             local row = rows[visibleIndex]
-            local task = row.task
             local y = listStartY + (visibleIndex - 1 - scrollOffset)
 
-            local isSelected = false
-            if selectedPath and pathEquals(selectedPath, row.path) then
-                isSelected = true
-            end
-
-            local rowBg
-            if isSelected then
-                rowBg = colors.lightGray
-            elseif (visibleIndex % 2) == 0 then
-                rowBg = colors.gray
+            if row.spacer then
+                fill(1, y, w, 1, colors.black)
             else
-                rowBg = colors.black
-            end
+                local task = row.task
 
-            fill(1, y, w, 1, rowBg)
-
-            local cbText = task.done and "[v]" or "[ ]"
-            local cbColor = task.done and colors.lime or colors.red
-            writeAt(2, y, cbText, cbColor, rowBg)
-
-            local pathCopy1 = copyPath(row.path)
-            registerHitbox(2, 4, y, y, function()
-                playTone(false)
-                toggleDone(pathCopy1)
-            end)
-
-            local treePrefix = buildTreePrefix(row)
-            local marker = " "
-            if task.subtasks and #task.subtasks > 0 then
-                marker = task.expanded and "-" or "+"
-            end
-
-            local doneBranch, totalBranch = countBranchProgress(task)
-            local suffix = ""
-            if task.subtasks and #task.subtasks > 0 then
-                suffix = " [" .. doneBranch .. "/" .. totalBranch .. "]"
-            end
-
-            local priLabel = "[" .. task.priority .. "] "
-            local lineStart = 6
-
-            writeAt(lineStart, y, priLabel, priorityColor(task.priority), rowBg)
-            local labelX = lineStart + #priLabel
-            local label = truncate(treePrefix .. marker .. " " .. task.text .. suffix, w - labelX)
-            local textColor = isSelected and colors.yellow or colors.white
-            writeAt(labelX, y, label, textColor, rowBg)
-
-            local pathCopy2 = copyPath(row.path)
-            registerHitbox(lineStart, w - 1, y, y, function()
-                playTone(false)
-                if selectedPath and pathEquals(selectedPath, pathCopy2) then
-                    toggleExpanded(pathCopy2, todoList)
-                else
-                    selectedPath = pathCopy2
+                local isSelected = false
+                if selectedPath and pathEquals(selectedPath, row.path) then
+                    isSelected = true
                 end
-            end)
+
+                local rowBg
+                if isSelected then
+                    rowBg = colors.lightGray
+                elseif (visibleIndex % 2) == 0 then
+                    rowBg = colors.gray
+                else
+                    rowBg = colors.black
+                end
+
+                fill(1, y, w, 1, rowBg)
+
+                local cbText = task.done and "[v]" or "[ ]"
+                local cbColor = task.done and colors.lime or colors.red
+                writeAt(2, y, cbText, cbColor, rowBg)
+
+                local pathCopy1 = copyPath(row.path)
+                registerHitbox(2, 4, y, y, function()
+                    playTone(false)
+                    toggleDone(pathCopy1)
+                end)
+
+                local treePrefix = buildTreePrefix(row)
+                local marker = " "
+                if task.subtasks and #task.subtasks > 0 then
+                    marker = task.expanded and "-" or "+"
+                end
+
+                local doneBranch, totalBranch = countBranchProgress(task)
+                local suffix = ""
+                if task.subtasks and #task.subtasks > 0 then
+                    suffix = " [" .. doneBranch .. "/" .. totalBranch .. "]"
+                end
+
+                local priLabel = "[" .. task.priority .. "] "
+                local lineStart = 6
+
+                writeAt(lineStart, y, priLabel, priorityColor(task.priority), rowBg)
+                local labelX = lineStart + #priLabel
+                local label = truncate(treePrefix .. marker .. " " .. task.text .. suffix, w - labelX)
+                local textColor = isSelected and colors.yellow or colors.white
+                writeAt(labelX, y, label, textColor, rowBg)
+
+                local pathCopy2 = copyPath(row.path)
+                registerHitbox(lineStart, w - 1, y, y, function()
+                    playTone(false)
+                    if selectedPath and pathEquals(selectedPath, pathCopy2) then
+                        toggleExpanded(pathCopy2, todoList)
+                    else
+                        selectedPath = pathCopy2
+                    end
+                end)
+            end
         end
     end
 
@@ -1136,8 +1150,9 @@ local function drawKeyboardPage()
     if #displayInput > inputMax then
         displayInput = displayInput:sub(#displayInput - inputMax + 2)
     end
-    writeAt(3, 5, truncate(displayInput, w - 6), colors.white, colors.lightGray)
-    writeAt(math.min(w - 2, 3 + #truncate(displayInput, w - 6)), 5, "_", colors.yellow, colors.lightGray)
+    local shown = truncate(displayInput, w - 6)
+    writeAt(3, 5, shown, colors.white, colors.lightGray)
+    writeAt(math.min(w - 2, 3 + #shown), 5, "_", colors.yellow, colors.lightGray)
 
     writeAt(3, 6, "Tap keys below to type", colors.gray, colors.lightGray)
 
@@ -1155,11 +1170,11 @@ local function drawKeyboardPage()
     local startX = math.max(2, math.floor((w - kbWidth) / 2) + 1)
     local startY = 9
 
-    local function drawKey(x, y, label, bg, fg, callback)
-        fill(x, y, keyW, 1, bg)
-        local tx = x + math.floor((keyW - #label) / 2)
+    local function drawKey(x, y, width, label, bg, fg, callback)
+        fill(x, y, width, 1, bg)
+        local tx = x + math.floor((width - #label) / 2)
         writeAt(tx, y, label, fg, bg)
-        registerHitbox(x, x + keyW - 1, y, y, callback)
+        registerHitbox(x, x + width - 1, y, y, callback)
     end
 
     for rowIndex, row in ipairs(keys) do
@@ -1167,7 +1182,7 @@ local function drawKeyboardPage()
         local x = startX
         for _, key in ipairs(row) do
             local capturedKey = key
-            drawKey(x, y, key, colors.lightGray, colors.white, function()
+            drawKey(x, y, keyW, key, colors.lightGray, colors.white, function()
                 playTone(false)
                 if #currentInput < 60 then
                     currentInput = currentInput .. capturedKey
@@ -1179,19 +1194,16 @@ local function drawKeyboardPage()
 
     local specialY = startY + (#keys * (1 + rowSpacing))
     local delX = startX
-    local spaceX = delX + (keyW * 2) + 2
+    local delW = 8
+    local spaceX = delX + delW + 2
     local spaceW = math.max(10, w - spaceX - 6)
 
-    fill(delX, specialY, 8, 1, colors.orange)
-    writeAt(delX + 2, specialY, "DEL", colors.black, colors.orange)
-    registerHitbox(delX, delX + 7, specialY, specialY, function()
+    drawKey(delX, specialY, delW, "DEL", colors.orange, colors.black, function()
         playTone(false)
         currentInput = currentInput:sub(1, -2)
     end)
 
-    fill(spaceX, specialY, spaceW, 1, colors.gray)
-    writeAt(spaceX + math.floor((spaceW - 5) / 2), specialY, "SPACE", colors.white, colors.gray)
-    registerHitbox(spaceX, spaceX + spaceW - 1, specialY, specialY, function()
+    drawKey(spaceX, specialY, spaceW, "SPACE", colors.gray, colors.white, function()
         playTone(false)
         if #currentInput < 60 then
             currentInput = currentInput .. " "
