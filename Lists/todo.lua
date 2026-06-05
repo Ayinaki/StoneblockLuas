@@ -37,7 +37,7 @@ end
 
 local function loadTasks()
     if not fs.exists(SAVE_FILE) then
-        todoList = {} -- LAUNCHES COMPLETELY EMPTY BY DEFAULT
+        todoList = {}
         return
     end
     todoList = {}
@@ -97,7 +97,7 @@ local function drawButton(x, y, width, height, text, mainColor, textColor)
 end
 
 -- ==========================================
--- MAIN VIEW: FIXED TASK BOARD
+-- MAIN VIEW: CHECKBOX TASK BOARD
 -- ==========================================
 local function drawListPage()
     mon.setBackgroundColor(colors.gray)
@@ -110,7 +110,7 @@ local function drawListPage()
     writeAt(2, 1, "FACTORY OPERATIONS PROTOCOL", colors.cyan, colors.lightGray)
     writeAt(2, 2, "ACTIVE DEVELOPMENT LOGS", colors.orange, colors.lightGray)
 
-    -- FIXED: Sized down Add Task Button to look normal next to titles
+    -- Add Task Button
     local abw = 10
     local abx = w - abw - 1
     drawButton(abx, 1, abw, 1, "[+ TASK]", colors.cyan, colors.gray)
@@ -135,23 +135,23 @@ local function drawListPage()
         -- Row background panel
         fill(2, startY, w - 2, 2, colors.lightGray)
 
-        -- FIXED: Restored classic Checkbox functionality combined with high-contrast text
-        local cbText = task.done and "[X] DONE" or "[ ] PNDG"
+        -- FIXED: Pure classic Checkbox layout [ ] vs [X] with clean margins
+        local cbText = task.done and "  [X]  " or "  [ ]  "
         local cbColor = task.done and colors.lime or colors.red
         local cbTextColor = task.done and colors.gray or colors.white
-        drawButton(3, startY, 10, 2, cbText, cbColor, cbTextColor)
+        drawButton(3, startY, 7, 2, cbText, cbColor, cbTextColor)
         
         local idx = i
-        registerHitbox(3, 12, startY, startY + 1, function()
+        registerHitbox(3, 9, startY, startY + 1, function()
             playTone(false)
             todoList[idx].done = not todoList[idx].done
             saveTasks()
         end)
 
-        -- Elegant Task Label String Placement
+        -- Task Label Layout (Shifted left slightly since the checkbox is smaller)
         local textFg = task.done and colors.orange or colors.white
-        writeAt(15, startY, string.sub(task.text, 1, w - 25), textFg, colors.lightGray)
-        writeAt(15, startY + 1, "INDEX LOG #" .. string.format("%02d", i), colors.gray, colors.lightGray)
+        writeAt(12, startY, string.sub(task.text, 1, w - 22), textFg, colors.lightGray)
+        writeAt(12, startY + 1, "INDEX LOG #" .. string.format("%02d", i), colors.gray, colors.lightGray)
 
         -- Action Delete Button
         local delX = w - 8
@@ -201,7 +201,7 @@ local function drawKeyboardPage()
             local capturedKey = key
             registerHitbox(startX, startX + kw - 1, startY, startY + kh - 1, function()
                 playTone(false)
-                if #currentInput < w - 25 then
+                if #currentInput < w - 22 then
                     currentInput = currentInput .. capturedKey
                 end
             end)
