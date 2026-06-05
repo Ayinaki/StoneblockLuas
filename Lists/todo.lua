@@ -197,6 +197,20 @@ local function writeAt(x, y, text, fg, bg)
     mon.write(text)
 end
 
+local function drawButton(x, y, label, bg, fg, callback)
+    local text = " " .. label .. " "
+    writeAt(x, y, text, fg or colors.white, bg)
+    registerHitbox(x, x + #text - 1, y, y, callback)
+    return #text
+end
+
+local function drawPanel(x, y, width, height)
+    fill(x, y, width, height, colors.black)
+    if width >= 2 and height >= 2 then
+        fill(x, y, width, 1, colors.gray)
+    end
+end
+
 local function playTone(isAction)
     if not speaker then return end
     pcall(function()
@@ -647,15 +661,14 @@ local function drawGuidePage()
     hitboxes = {}
 
     local w, h = mon.getSize()
+    drawPanel(1, 1, w, h)
 
     fill(1, 1, w, 2, colors.gray)
     writeAt(2, 1, "GUIDE", colors.cyan, colors.gray)
     writeAt(2, 2, "How to use the task tree", colors.yellow, colors.gray)
 
-    local backLabel = " BACK "
-    local backX = w - #backLabel - 1
-    writeAt(backX, 1, backLabel, colors.white, colors.red)
-    registerHitbox(backX, backX + #backLabel - 1, 1, 1, function()
+    local backLabel = "BACK"
+    local backW = drawButton(w - (#backLabel + 2) - 1, 1, backLabel, colors.red, colors.white, function()
         playTone(true)
         currentPage = "TREE"
     end)
@@ -671,13 +684,18 @@ local function drawGuidePage()
         "7. Archive restores finished branches."
     }
 
-    local startY = 4
+    local boxY = 4
+    local boxH = math.min(h - 6, 10)
+    fill(2, boxY, w - 2, boxH, colors.black)
+
     for i, line in ipairs(lines) do
-        local y = startY + i - 1
-        if y <= h then
-            writeAt(2, y, truncate(line, w - 3), colors.white, colors.black)
+        local y = boxY + i - 1
+        if y < h - 1 then
+            writeAt(4, y, truncate(line, w - 8), colors.white, colors.black)
         end
     end
+
+    writeAt(3, h - 1, "Tap BACK to return", colors.gray, colors.black)
 end
 
 -- ==========================================
@@ -689,6 +707,7 @@ local function drawSortPage()
     hitboxes = {}
 
     local w, h = mon.getSize()
+    drawPanel(1, 1, w, h)
 
     fill(1, 1, w, 2, colors.gray)
     writeAt(2, 1, "SORT OPTIONS", colors.cyan, colors.gray)
@@ -700,21 +719,17 @@ local function drawSortPage()
         { label = "INCOMPLETE FIRST", mode = "INCOMPLETE", color = colors.lime }
     }
 
-    local y = 5
-    for _, opt in ipairs(options) do
-        local label = " " .. opt.label .. " "
-        writeAt(4, y, label, colors.black, opt.color)
-        registerHitbox(4, 4 + #label - 1, y, y, function()
+    local groupY = math.max(5, math.floor(h / 2) - 3)
+    for i, opt in ipairs(options) do
+        local y = groupY + (i - 1) * 2
+        drawButton(4, y, opt.label, opt.color, colors.black, function()
             playTone(true)
             applySort(opt.mode)
             currentPage = "TREE"
         end)
-        y = y + 2
     end
 
-    local backLabel = " BACK "
-    writeAt(4, h - 1, backLabel, colors.white, colors.red)
-    registerHitbox(4, 4 + #backLabel - 1, h - 1, h - 1, function()
+    drawButton(4, h - 1, "BACK", colors.red, colors.white, function()
         playTone(false)
         currentPage = "TREE"
     end)
@@ -731,6 +746,7 @@ local function drawPriorityPage()
     local w, h = mon.getSize()
     local task = getTaskByPath(priorityTargetPath, todoList)
 
+    drawPanel(1, 1, w, h)
     fill(1, 1, w, 2, colors.gray)
     writeAt(2, 1, "SET PRIORITY", colors.cyan, colors.gray)
 
@@ -741,17 +757,16 @@ local function drawPriorityPage()
     end
 
     local options = {
-        { label = "NONE", color = colors.lightGray },
-        { label = "LOW",  color = colors.blue },
-        { label = "MED",  color = colors.orange },
-        { label = "HIGH", color = colors.red }
+        { label = "NONE", color = colors.lightGray, fg = colors.white },
+        { label = "LOW",  color = colors.blue, fg = colors.white },
+        { label = "MED",  color = colors.orange, fg = colors.white },
+        { label = "HIGH", color = colors.red, fg = colors.white }
     }
 
-    local y = 5
-    for _, opt in ipairs(options) do
-        local label = " " .. opt.label .. " "
-        writeAt(4, y, label, colors.white, opt.color)
-        registerHitbox(4, 4 + #label - 1, y, y, function()
+    local startY = math.max(5, math.floor(h / 2) - 3)
+    for i, opt in ipairs(options) do
+        local y = startY + (i - 1) * 2
+        drawButton(4, y, opt.label, opt.color, opt.fg, function()
             playTone(true)
             if task then
                 setTaskPriority(priorityTargetPath, opt.label)
@@ -759,12 +774,9 @@ local function drawPriorityPage()
             priorityTargetPath = nil
             currentPage = "TREE"
         end)
-        y = y + 2
     end
 
-    local backLabel = " BACK "
-    writeAt(4, h - 1, backLabel, colors.white, colors.red)
-    registerHitbox(4, 4 + #backLabel - 1, h - 1, h - 1, function()
+    drawButton(4, h - 1, "BACK", colors.red, colors.white, function()
         playTone(false)
         priorityTargetPath = nil
         currentPage = "TREE"
@@ -782,24 +794,30 @@ local function drawArchivePage()
     local w, h = mon.getSize()
     local rows = flattenVisibleTree(archiveList, 0, {}, {}, {}, false)
 
+    drawPanel(1, 1, w, h)
     fill(1, 1, w, 2, colors.gray)
     writeAt(2, 1, "ARCHIVE", colors.cyan, colors.gray)
     writeAt(2, 2, #archiveList .. " archived branches", colors.orange, colors.gray)
 
-    local backLabel = " BACK "
-    local backX = w - #backLabel - 1
-    writeAt(backX, 1, backLabel, colors.white, colors.red)
-    registerHitbox(backX, backX + #backLabel - 1, 1, 1, function()
+    drawButton(w - 8, 1, "BACK", colors.red, colors.white, function()
         playTone(true)
         currentPage = "TREE"
     end)
 
     local listStartY = 4
-    local listH = h - listStartY
+    local footerY = h
+    local listH = footerY - listStartY - 1
     if listH < 1 then listH = 1 end
 
     if #rows == 0 then
-        writeAt(2, 5, "No archived branches yet.", colors.lightGray, colors.black)
+        local msg1 = "No archived branches yet."
+        local msg2 = "Completed root tasks can be moved here."
+        writeAt(math.max(2, math.floor((w - #msg1) / 2)), math.floor(h / 2) - 1, msg1, colors.lightGray, colors.black)
+        writeAt(math.max(2, math.floor((w - #msg2) / 2)), math.floor(h / 2), msg2, colors.gray, colors.black)
+        drawButton(3, h, "BACK", colors.red, colors.white, function()
+            playTone(false)
+            currentPage = "TREE"
+        end)
         return
     end
 
@@ -814,8 +832,8 @@ local function drawArchivePage()
     end
 
     if archiveScrollOffset < maxScroll then
-        writeAt(w, h, "v", colors.cyan, colors.black)
-        registerHitbox(w, w, h, h, function()
+        writeAt(w, h - 1, "v", colors.cyan, colors.black)
+        registerHitbox(w, w, h - 1, h - 1, function()
             archiveScrollOffset = math.min(maxScroll, archiveScrollOffset + 1)
         end)
     end
@@ -873,6 +891,11 @@ local function drawArchivePage()
             writeAt(textStart, y, truncate(treePrefix .. marker .. " " .. task.text .. suffix, restoreX - textStart - 1), colors.lightGray, rowBg)
         end
     end
+
+    drawButton(3, h, "BACK", colors.red, colors.white, function()
+        playTone(false)
+        currentPage = "TREE"
+    end)
 end
 
 -- ==========================================
@@ -892,10 +915,7 @@ local function drawDeleteConfirmPage()
 
     if not task then
         writeAt(2, 2, "Task not found.", colors.white, colors.red)
-        local backLabel = " BACK "
-        local backX = w - #backLabel - 1
-        writeAt(backX, 1, backLabel, colors.white, colors.gray)
-        registerHitbox(backX, backX + #backLabel - 1, 1, 1, function()
+        drawButton(w - 8, 1, "BACK", colors.gray, colors.white, function()
             currentPage = (deleteTargetListName == "ARCHIVE") and "ARCHIVE" or "TREE"
             deleteTargetPath = nil
             deleteTargetListName = "ACTIVE"
@@ -908,17 +928,16 @@ local function drawDeleteConfirmPage()
     local sourceText = (deleteTargetListName == "ARCHIVE") and "From: Archive" or "From: Active list"
     writeAt(2, 3, truncate(sourceText .. " | Branch size: " .. countBranchSize(task), w - 4), colors.white, colors.red)
 
-    writeAt(2, 6, "This will remove the selected task", colors.lightGray, colors.black)
-    writeAt(2, 7, "and all of its subtasks.", colors.lightGray, colors.black)
+    writeAt(4, 7, "This will remove the selected task", colors.lightGray, colors.black)
+    writeAt(4, 8, "and all of its subtasks.", colors.lightGray, colors.black)
 
-    local cancelLabel = " CANCEL "
-    local deleteLabel = " DELETE "
-    local cancelX = math.floor(w / 2) - #cancelLabel - 2
+    local cancelLabel = "CANCEL"
+    local deleteLabel = "DELETE"
+    local cancelX = math.floor(w / 2) - 10
     local deleteX = math.floor(w / 2) + 2
-    local by = math.min(h, 10)
+    local by = math.min(h - 2, 11)
 
-    writeAt(cancelX, by, cancelLabel, colors.white, colors.gray)
-    registerHitbox(cancelX, cancelX + #cancelLabel - 1, by, by, function()
+    drawButton(cancelX, by, cancelLabel, colors.gray, colors.white, function()
         playTone(false)
         deleteTargetPath = nil
         local nextPage = (deleteTargetListName == "ARCHIVE") and "ARCHIVE" or "TREE"
@@ -926,8 +945,7 @@ local function drawDeleteConfirmPage()
         currentPage = nextPage
     end)
 
-    writeAt(deleteX, by, deleteLabel, colors.white, colors.red)
-    registerHitbox(deleteX, deleteX + #deleteLabel - 1, by, by, function()
+    drawButton(deleteX, by, deleteLabel, colors.red, colors.white, function()
         playTone(true)
         if deleteTargetPath then
             if deleteTargetListName == "ARCHIVE" then
@@ -970,10 +988,7 @@ local function drawTreePage()
     end
     writeAt(2, 3, truncate(targetLabel, w - 4), colors.yellow, colors.gray)
 
-    local addLabel = "+ Add"
-    local addX = w - #addLabel - 2
-    writeAt(addX, 1, " " .. addLabel .. " ", colors.black, colors.cyan)
-    registerHitbox(addX, addX + #addLabel + 1, 1, 1, function()
+    drawButton(w - 8, 1, "+ Add", colors.cyan, colors.black, function()
         playTone(true)
         startAddMode()
     end)
@@ -988,52 +1003,41 @@ local function drawTreePage()
     local listH = h - listStartY - footerReserved
     if listH < 1 then listH = 1 end
 
+    fill(1, actionY, w, 1, colors.black)
     if selectedPath then
-        local unselectLabel = " Unselect "
-        local editLabel = " Edit "
-        local delLabel = " Delete "
-
-        local ux = 2
-        writeAt(ux, actionY, unselectLabel, colors.black, colors.blue)
-        registerHitbox(ux, ux + #unselectLabel - 1, actionY, actionY, function()
+        local nextX = 2
+        nextX = nextX + drawButton(nextX, actionY, "Unselect", colors.blue, colors.black, function()
             playTone(false)
             selectedPath = nil
-        end)
-
-        local nextX = ux + #unselectLabel + 1
+        end) + 1
 
         if shouldShowPriority(selectedPath) then
-            local priLabel = " Priority "
-            writeAt(nextX, actionY, priLabel, colors.white, colors.orange)
-            registerHitbox(nextX, nextX + #priLabel - 1, actionY, actionY, function()
+            nextX = nextX + drawButton(nextX, actionY, "Priority", colors.orange, colors.white, function()
                 playTone(true)
                 startPriorityPage(selectedPath)
-            end)
-            nextX = nextX + #priLabel + 1
+            end) + 1
         end
 
-        writeAt(nextX, actionY, editLabel, colors.black, colors.yellow)
-        registerHitbox(nextX, nextX + #editLabel - 1, actionY, actionY, function()
+        nextX = nextX + drawButton(nextX, actionY, "Edit", colors.yellow, colors.black, function()
             playTone(true)
             startEditMode(selectedPath)
-        end)
+        end) + 1
 
-        nextX = nextX + #editLabel + 1
-
-        writeAt(nextX, actionY, delLabel, colors.white, colors.red)
-        registerHitbox(nextX, nextX + #delLabel - 1, actionY, actionY, function()
+        drawButton(nextX, actionY, "Delete", colors.red, colors.white, function()
             playTone(true)
             startDeleteConfirm(selectedPath, "ACTIVE")
         end)
     else
-        writeAt(2, actionY, "Tap a task to select it", colors.lightGray, colors.black)
+        writeAt(3, actionY, "Select a task to edit, reprioritise, or delete", colors.gray, colors.black)
     end
 
     fill(1, spacerY, w, 1, colors.black)
 
     if #rows == 0 then
-        writeAt(math.floor((w - 17) / 2) + 1, 9, "Nothing here yet!", colors.lightGray, colors.black)
-        writeAt(math.floor((w - 31) / 2) + 1, 10, "Tap '+ Add' to create a root task", colors.gray, colors.black)
+        local msg1 = "Nothing here yet!"
+        local msg2 = "Tap '+ Add' to create a root task"
+        writeAt(math.max(2, math.floor((w - #msg1) / 2)), math.floor(h / 2) - 1, msg1, colors.lightGray, colors.black)
+        writeAt(math.max(2, math.floor((w - #msg2) / 2)), math.floor(h / 2), msg2, colors.gray, colors.black)
     else
         local maxScroll = math.max(0, #rows - listH)
         scrollOffset = math.min(scrollOffset, maxScroll)
@@ -1119,36 +1123,25 @@ local function drawTreePage()
         end
     end
 
-    local guideLabel = " GUIDE "
-    local archiveLabel = " ARCHIVE "
-    local sortLabel = " SORT "
-
-    writeAt(2, h, guideLabel, colors.black, colors.orange)
-    registerHitbox(2, 2 + #guideLabel - 1, h, h, function()
+    local nextX = 2
+    nextX = nextX + drawButton(nextX, h, "GUIDE", colors.orange, colors.black, function()
         playTone(true)
         currentPage = "GUIDE"
-    end)
+    end) + 1
 
-    local archX = 2 + #guideLabel + 1
-    writeAt(archX, h, archiveLabel, colors.white, colors.blue)
-    registerHitbox(archX, archX + #archiveLabel - 1, h, h, function()
+    nextX = nextX + drawButton(nextX, h, "ARCHIVE", colors.blue, colors.white, function()
         playTone(true)
         archiveScrollOffset = 0
         currentPage = "ARCHIVE"
-    end)
+    end) + 1
 
-    local sortX = archX + #archiveLabel + 1
-    writeAt(sortX, h, sortLabel, colors.black, colors.purple)
-    registerHitbox(sortX, sortX + #sortLabel - 1, h, h, function()
+    drawButton(nextX, h, "SORT", colors.purple, colors.black, function()
         playTone(true)
         currentPage = "SORT"
     end)
 
     if hasCompletedTopLevelTasks() then
-        local archiveDoneLabel = " ARCHIVE DONE "
-        local archiveDoneX = w - #archiveDoneLabel - 1
-        writeAt(archiveDoneX, h, archiveDoneLabel, colors.black, colors.lime)
-        registerHitbox(archiveDoneX, archiveDoneX + #archiveDoneLabel - 1, h, h, function()
+        drawButton(w - 16, h, "ARCHIVE DONE", colors.lime, colors.black, function()
             playTone(true)
             archiveCompletedBranches()
         end)
@@ -1164,41 +1157,40 @@ local function drawKeyboardPage()
     hitboxes = {}
 
     local w, h = mon.getSize()
+    drawPanel(1, 1, w, h)
 
-    fill(1, 1, w, 4, colors.gray)
-
+    fill(1, 1, w, 3, colors.black)
     if inputMode == "EDIT" then
-        writeAt(2, 1, "EDIT TASK", colors.orange, colors.gray)
+        writeAt(2, 1, "EDIT TASK", colors.orange, colors.black)
     else
-        writeAt(2, 1, "NEW TASK", colors.orange, colors.gray)
+        writeAt(2, 1, "NEW TASK", colors.orange, colors.black)
     end
 
     local targetName = "ROOT"
     if inputMode == "EDIT" then
         local t = getTaskByPath(editingPath, todoList)
         if t then targetName = t.text end
-        writeAt(2, 2, truncate("Editing: " .. targetName, w - 4), colors.yellow, colors.gray)
+        writeAt(2, 2, truncate("Editing: " .. targetName, w - 4), colors.yellow, colors.black)
     else
         if inputTargetPath then
             local parent = getTaskByPath(inputTargetPath, todoList)
             if parent then targetName = parent.text end
         end
-        writeAt(2, 2, truncate("Parent: " .. targetName, w - 4), colors.yellow, colors.gray)
+        writeAt(2, 2, truncate("Parent: " .. targetName, w - 4), colors.yellow, colors.black)
     end
 
-    fill(2, 4, w - 2, 3, colors.lightGray)
-    writeAt(3, 4, "TEXT", colors.cyan, colors.lightGray)
+    fill(3, 4, w - 4, 3, colors.lightGray)
+    writeAt(4, 4, "TEXT", colors.cyan, colors.lightGray)
 
     local displayInput = currentInput
-    local inputMax = w - 6
+    local inputMax = w - 8
     if #displayInput > inputMax then
         displayInput = displayInput:sub(#displayInput - inputMax + 2)
     end
-    local shown = truncate(displayInput, w - 6)
-    writeAt(3, 5, shown, colors.white, colors.lightGray)
-    writeAt(math.min(w - 2, 3 + #shown), 5, "_", colors.yellow, colors.lightGray)
-
-    writeAt(3, 6, "Tap keys below to type", colors.gray, colors.lightGray)
+    local shown = truncate(displayInput, w - 8)
+    writeAt(4, 5, shown, colors.white, colors.lightGray)
+    writeAt(math.min(w - 2, 4 + #shown), 5, "_", colors.yellow, colors.lightGray)
+    writeAt(4, 6, "Tap keys below to type", colors.gray, colors.lightGray)
 
     local keys = {
         { "1","2","3","4","5","6","7","8","9","0" },
@@ -1258,29 +1250,22 @@ local function drawKeyboardPage()
     local leftX = 2
 
     if inputMode == "ADD" then
-        local rootLabel = " ROOT "
-        writeAt(leftX, actionY, rootLabel, colors.white, colors.blue)
-        registerHitbox(leftX, leftX + #rootLabel - 1, actionY, actionY, function()
+        leftX = leftX + drawButton(leftX, actionY, "ROOT", colors.blue, colors.white, function()
             playTone(false)
             inputTargetPath = nil
-        end)
-        leftX = leftX + #rootLabel + 1
+        end) + 1
     end
 
-    local cancelLabel = " CANCEL "
-    writeAt(leftX, actionY, cancelLabel, colors.white, colors.red)
-    registerHitbox(leftX, leftX + #cancelLabel - 1, actionY, actionY, function()
+    leftX = leftX + drawButton(leftX, actionY, "CANCEL", colors.red, colors.white, function()
         playTone(true)
         currentInput = ""
         inputMode = "ADD"
         editingPath = nil
         currentPage = "TREE"
-    end)
+    end) + 1
 
-    local actionLabel = (inputMode == "EDIT") and " SAVE " or " ADD "
-    local actionX = w - #actionLabel - 1
-    writeAt(actionX, actionY, actionLabel, colors.black, colors.lime)
-    registerHitbox(actionX, actionX + #actionLabel - 1, actionY, actionY, function()
+    local actionLabel = (inputMode == "EDIT") and "SAVE" or "ADD"
+    drawButton(w - (#actionLabel + 2) - 1, actionY, actionLabel, colors.lime, colors.black, function()
         local trimmed = currentInput:gsub("^%s+", ""):gsub("%s+$", "")
         if trimmed ~= "" then
             playTone(true)
