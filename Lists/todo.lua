@@ -3,19 +3,27 @@ local speaker = peripheral.find("speaker")
 
 if not mon then print("Error: No monitor found!") return end
 
-mon.setTextScale(1)
+mon.setTextScale(0.5)
 mon.clear()
 
 -- ==========================================
--- HIGH-TECH INDUSTRIAL PALETTE
+-- COLOUR PALETTE
 -- ==========================================
 if mon.isColor() then
-    mon.setPaletteColor(colors.gray,      0x0F172A) -- Deep Charcoal Canvas
-    mon.setPaletteColor(colors.lightGray, 0x1E293B) -- Row Background Panel
-    mon.setPaletteColor(colors.cyan,      0x0EA5E9) -- Electric Blue Accent
-    mon.setPaletteColor(colors.lime,      0x10B981) -- Emerald Green
-    mon.setPaletteColor(colors.red,       0xF43F5E) -- Crimson Red
-    mon.setPaletteColor(colors.orange,    0xF59E0B) -- Amber Accent
+    mon.setPaletteColor(colors.black,     0x0D1117) -- Deep background
+    mon.setPaletteColor(colors.gray,      0x161B22) -- Surface / card bg
+    mon.setPaletteColor(colors.lightGray, 0x21262D) -- Elevated surface
+    mon.setPaletteColor(colors.white,     0xE6EDF3) -- Primary text
+    mon.setPaletteColor(colors.cyan,      0x58A6FF) -- Blue accent (add btn, headers)
+    mon.setPaletteColor(colors.lime,      0x3FB950) -- Done / confirm green
+    mon.setPaletteColor(colors.red,       0xF85149) -- Delete / abort red
+    mon.setPaletteColor(colors.orange,    0xD29922) -- Pending / backspace amber
+    mon.setPaletteColor(colors.purple,    0xBC8CFF) -- Input cursor accent
+    mon.setPaletteColor(colors.yellow,    0xE3B341) -- Highlight / label
+    mon.setPaletteColor(colors.blue,      0x1F6FEB) -- Button backgrounds
+    mon.setPaletteColor(colors.magenta,   0x388BFD) -- Key hover bg
+    mon.setPaletteColor(colors.brown,     0x30363D) -- Key background
+    mon.setPaletteColor(colors.pink,      0x58A6FF) -- Key text
 end
 
 local currentPage = "LIST"
@@ -23,9 +31,10 @@ local hitboxes = {}
 local todoList = {}
 local currentInput = ""
 local SAVE_FILE = "/todo_items.txt"
+local scrollOffset = 0
 
 -- ==========================================
--- DATA STORAGE ENGINE
+-- DATA STORAGE
 -- ==========================================
 local function saveTasks()
     local file = fs.open(SAVE_FILE, "w")
@@ -36,18 +45,14 @@ local function saveTasks()
 end
 
 local function loadTasks()
-    if not fs.exists(SAVE_FILE) then
-        todoList = {}
-        return
-    end
+    if not fs.exists(SAVE_FILE) then todoList = {} return end
     todoList = {}
     local file = fs.open(SAVE_FILE, "r")
     local line = file.readLine()
     while line do
-        local parts = {}
-        for match in string.gmatch(line, "[^:]+") do table.insert(parts, match) end
-        if #parts >= 2 then
-            table.insert(todoList, { text = parts[1], done = (parts[2] == "true") })
+        local text, done = line:match("^(.*):([^:]+)$")
+        if text and done then
+            table.insert(todoList, { text = text, done = (done == "true") })
         end
         line = file.readLine()
     end
@@ -55,10 +60,10 @@ local function loadTasks()
 end
 
 -- ==========================================
--- UI DRAWING HELPERS
+-- UI HELPERS
 -- ==========================================
 local function registerHitbox(x1, x2, y1, y2, callback)
-    table.insert(hitboxes, { x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback })
+    table.insert(hitboxes, { x1=x1, x2=x2, y1=y1, y2=y2, callback=callback })
 end
 
 local function fill(x, y, width, height, bg)
@@ -79,183 +84,217 @@ end
 local function playTone(isAction)
     if not speaker then return end
     pcall(function()
-        if isAction then 
-            speaker.playNote("chime", 0.9, 12) 
-        else 
-            speaker.playNote("harp", 0.7, 5) 
+        if isAction then
+            speaker.playNote("chime", 0.9, 12)
+        else
+            speaker.playNote("harp", 0.7, 5)
         end
     end)
 end
 
-local function drawButton(x, y, width, height, text, mainColor, textColor)
-    fill(x, y, width, height, mainColor)
-    local tx = x + math.max(0, math.floor((width - #text) / 2))
-    local ty = y + math.floor(height / 2)
-    writeAt(tx, ty, text, textColor, mainColor)
-    mon.setBackgroundColor(colors.gray)
-    mon.setTextColor(colors.white)
+local function truncate(str, maxLen)
+    if #str > maxLen then return str:sub(1, maxLen - 1) .. "~" end
+    return str
 end
 
 -- ==========================================
--- MAIN VIEW: STREAMLINED TASK BOARD
+-- MAIN LIST VIEW
 -- ==========================================
 local function drawListPage()
-    mon.setBackgroundColor(colors.gray)
+    mon.setBackgroundColor(colors.black)
     mon.clear()
     hitboxes = {}
     local w, h = mon.getSize()
 
-    -- Clean Single-Row Header Bar
-    fill(1, 1, w, 1, colors.lightGray)
-    writeAt(2, 1, "LIST", colors.cyan, colors.lightGray)
+    -- ── Header bar ──────────────────────────────────────────
+    fill(1, 1, w, 2, colors.gray)
+    -- Left: title
+    writeAt(2, 1, "TODO LIST", colors.cyan, colors.gray)
+    -- Task count
+    local total = #todoList
+    local done  = 0
+    for _, t in ipairs(todoList) do if t.done then done = done + 1 end end
+    local countStr = done .. "/" .. total .. " done"
+    writeAt(2, 2, countStr, colors.orange, colors.gray)
 
-    -- Sized Down Add Task Button (Single Row)
-    local abw = 10
-    local abx = w - abw - 1
-    drawButton(abx, 1, abw, 1, "[+ TASK]", colors.cyan, colors.gray)
-    registerHitbox(abx, abx + abw - 1, 1, 1, function()
+    -- Right: + Add button
+    local addLabel = "+ Add"
+    local ax = w - #addLabel - 2
+    writeAt(ax, 1, " " .. addLabel .. " ", colors.black, colors.cyan)
+    registerHitbox(ax, ax + #addLabel + 1, 1, 1, function()
         playTone(true)
         currentInput = ""
+        scrollOffset = 0
         currentPage = "KEYBOARD"
     end)
 
-    -- Empty State Notice
+    -- Divider
+    fill(1, 3, w, 1, colors.lightGray)
+    writeAt(2, 3, string.rep("-", w - 2), colors.gray, colors.lightGray)
+
+    -- ── Empty state ──────────────────────────────────────────
     if #todoList == 0 then
-        writeAt(math.floor((w - 18) / 2) + 1, 5, "NO ACTIVE PROTOCOLS", colors.lightGray, colors.gray)
-        writeAt(math.floor((w - 24) / 2) + 1, 6, "TAP [+ TASK] TO INITIALIZE", colors.gray, colors.gray)
+        local msg1 = "Nothing here yet!"
+        local msg2 = "Tap '+ Add' to create a task"
+        writeAt(math.floor((w - #msg1) / 2) + 1, 6, msg1, colors.lightGray, colors.black)
+        writeAt(math.floor((w - #msg2) / 2) + 1, 7, msg2, colors.gray, colors.black)
         return
     end
 
-    -- Item Rendering Loop
-    local startY = 3
-    for i, task in ipairs(todoList) do
-        if startY + 1 > h then break end
+    -- ── Scroll arrows ─────────────────────────────────────────
+    -- Each item occupies 1 row
+    local listStartY = 4
+    local listH      = h - listStartY  -- usable rows
+    local maxScroll  = math.max(0, #todoList - listH)
+    scrollOffset     = math.min(scrollOffset, maxScroll)
 
-        fill(2, startY, w - 2, 1, colors.lightGray)
+    if scrollOffset > 0 then
+        writeAt(w, listStartY, "^", colors.cyan, colors.black)
+        registerHitbox(w, w, listStartY, listStartY, function()
+            scrollOffset = math.max(0, scrollOffset - 1)
+        end)
+    end
+    if scrollOffset < maxScroll then
+        writeAt(w, h, "v", colors.cyan, colors.black)
+        registerHitbox(w, w, h, h, function()
+            scrollOffset = math.min(maxScroll, scrollOffset + 1)
+        end)
+    end
 
-        -- Checkbox
-        local cbText = task.done and " [X] " or " [ ] "
-        local cbColor = task.done and colors.lime or colors.red
-        local cbTextColor = task.done and colors.gray or colors.white
-        drawButton(3, startY, 5, 1, cbText, cbColor, cbTextColor)
-        
+    -- ── Items ────────────────────────────────────────────────
+    for i = 1 + scrollOffset, math.min(#todoList, listH + scrollOffset) do
+        local task = todoList[i]
+        local rowY = listStartY + (i - 1 - scrollOffset)
+
+        -- Row bg (alternating)
+        local rowBg = (i % 2 == 0) and colors.gray or colors.black
+        fill(1, rowY, w, 1, rowBg)
+
+        -- Checkbox  [v] or [ ]
+        local cbSymbol = task.done and "[v]" or "[ ]"
+        local cbColor  = task.done and colors.lime or colors.red
+        writeAt(2, rowY, cbSymbol, cbColor, rowBg)
         local idx = i
-        registerHitbox(3, 7, startY, startY, function()
+        registerHitbox(2, 4, rowY, rowY, function()
             playTone(false)
             todoList[idx].done = not todoList[idx].done
             saveTasks()
         end)
 
-        -- Label
-        local textFg = task.done and colors.orange or colors.white
-        writeAt(10, startY, string.sub(task.text, 1, w - 20), textFg, colors.lightGray)
+        -- Task text
+        local textFg = task.done and colors.lightGray or colors.white
+        local maxTextW = w - 14  -- leave room for checkbox + del button
+        local label = truncate(task.text, maxTextW)
+        if task.done then
+            -- strikethrough simulation: prefix with ~
+            writeAt(7, rowY, label, colors.lightGray, rowBg)
+        else
+            writeAt(7, rowY, label, colors.white, rowBg)
+        end
 
-        -- Clear Button
-        local delX = w - 8
-        drawButton(delX, startY, 7, 1, "CLEAR", colors.red, colors.white)
-        registerHitbox(delX, delX + 6, startY, startY, function()
+        -- Delete button
+        local delX = w - 5
+        writeAt(delX, rowY, " Del ", colors.white, colors.red)
+        registerHitbox(delX, delX + 4, rowY, rowY, function()
             playTone(true)
             table.remove(todoList, idx)
             saveTasks()
+            scrollOffset = math.min(scrollOffset, math.max(0, #todoList - listH))
         end)
-
-        startY = startY + 2
     end
 end
 
 -- ==========================================
--- REPROPORTIONED KEYBOARD OVERLAY
+-- COMPACT KEYBOARD VIEW
 -- ==========================================
 local function drawKeyboardPage()
-    mon.setBackgroundColor(colors.gray)
+    mon.setBackgroundColor(colors.black)
     mon.clear()
     hitboxes = {}
     local w, h = mon.getSize()
 
-    -- Simplified Header Bar Config
-    fill(1, 1, w, 2, colors.lightGray)
-    writeAt(2, 1, "NAME OF TASK/ITEM:", colors.orange, colors.lightGray)
-    writeAt(2, 2, ">> " .. currentInput .. "_", colors.white, colors.lightGray)
+    -- ── Input bar ────────────────────────────────────────────
+    fill(1, 1, w, 2, colors.gray)
+    writeAt(2, 1, "New task:", colors.orange, colors.gray)
+    local displayInput = currentInput
+    -- Truncate display if too long
+    if #displayInput > w - 6 then
+        displayInput = ".." .. displayInput:sub(-(w - 8))
+    end
+    writeAt(2, 2, displayInput .. "_", colors.white, colors.gray)
+
+    -- ── Keyboard layout ───────────────────────────────────────
+    -- kw = key width (chars), kh = key height (rows)
+    -- Target: small, 1-row keys to fit compact monitors
+    local kw = 3
+    local kh = 1
 
     local rows = {
-        { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0" },
-        { "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P" },
-        { "A", "S", "D", "F", "G", "H", "J", "K", "L", "-" },
-        { "Z", "X", "C", "V", "B", "N", "M", ",", ".", " " }
+        { "1","2","3","4","5","6","7","8","9","0" },
+        { "Q","W","E","R","T","Y","U","I","O","P" },
+        { "A","S","D","F","G","H","J","K","L","-" },
+        { "Z","X","C","V","B","N","M",",","."," " }
     }
 
-    -- Proportional Sizing Variables for 3x3 Monitors
-    local kw = 4 -- Expanded key text scale boundary widths
-    local kh = 2
-    local startY = 4
+    -- Total keyboard width for centering
+    local numCols = 10
+    local totalKbW = numCols * kw + (numCols - 1)  -- keys + gaps between
+    local kbStartX = math.floor((w - totalKbW) / 2) + 1
+
+    -- Leave bottom 2 rows for action buttons; place keys above that
+    local actionRowY = h - 1
+    local kbStartY   = actionRowY - (#rows * (kh + 1)) -- keys + 1-row gap each
+
+    -- Clamp so it starts at minimum row 4
+    if kbStartY < 4 then kbStartY = 4 end
 
     for rIdx, row in ipairs(rows) do
-        -- Dynamically offset layout horizontally to stretch edge-to-edge seamlessly
-        local startX = math.floor((w - (#row * (kw + 1))) / 2) + 1
+        local startX = kbStartX
+        local rowY   = kbStartY + (rIdx - 1) * (kh + 1)
+
         for _, key in ipairs(row) do
             local label = key == " " and "SPC" or key
-            
-            fill(startX, startY, kw, kh, colors.lightGray)
-            writeAt(startX + math.floor((kw - #label)/2), startY + 1, label, colors.white, colors.lightGray)
+
+            -- Key background
+            fill(startX, rowY, kw, kh, colors.lightGray)
+            -- Centered label
+            local lx = startX + math.floor((kw - #label) / 2)
+            writeAt(lx, rowY, label, colors.white, colors.lightGray)
 
             local capturedKey = key
-            registerHitbox(startX, startX + kw - 1, startY, startY + kh - 1, function()
+            registerHitbox(startX, startX + kw - 1, rowY, rowY + kh - 1, function()
                 playTone(false)
-                if #currentInput < w - 20 then
+                if #currentInput < 40 then
                     currentInput = currentInput .. capturedKey
                 end
             end)
+
             startX = startX + kw + 1
         end
-        startY = startY + kh + 1 -- Shrunk inner padding down to 1 row
     end
 
-    local btnY = h - 2
-    
-    -- Balanced Bottom Operations Buttons Alignment
-    drawButton(3, btnY, 8, 2, "[<-]", colors.orange, colors.gray)
-    registerHitbox(3, 10, btnY, btnY + 1, function()
+    -- ── Action buttons (bottom row) ───────────────────────────
+    -- [<-] Backspace | [CANCEL] | [ADD]
+    local bY = h
+
+    -- Backspace
+    local bsLabel = "<-"
+    fill(2, bY, 5, 1, colors.orange)
+    writeAt(3, bY, bsLabel, colors.black, colors.orange)
+    registerHitbox(2, 6, bY, bY, function()
         playTone(false)
-        currentInput = string.sub(currentInput, 1, #currentInput - 1)
+        currentInput = currentInput:sub(1, -2)
     end)
 
-    drawButton(13, btnY, 10, 2, "ABORT", colors.red, colors.white)
-    registerHitbox(13, 22, btnY, btnY + 1, function()
+    -- Cancel
+    local canLabel = "CANCEL"
+    local canX = math.floor(w / 2) - math.floor(#canLabel / 2)
+    fill(canX - 1, bY, #canLabel + 2, 1, colors.red)
+    writeAt(canX, bY, canLabel, colors.white, colors.red)
+    registerHitbox(canX - 1, canX + #canLabel, bY, bY, function()
         playTone(true)
         currentPage = "LIST"
     end)
 
-    local svX = w - 13
-    drawButton(svX, btnY, 11, 2, "COMMIT", colors.lime, colors.gray)
-    registerHitbox(svX, svX + 10, btnY, btnY + 1, function()
-        if currentInput ~= "" then
-            playTone(true)
-            table.insert(todoList, { text = currentInput, done = false })
-            saveTasks()
-            currentPage = "LIST"
-        end
-    end)
-end
-
-local function render()
-    if currentPage == "LIST" then drawMainPage = drawListPage drawListPage() else drawKeyboardPage() end
-end
-
--- ==========================================
--- INITIALIZER
--- ==========================================
-loadTasks()
-render()
-
-while true do
-    local event, targetDevice, x, y = os.pullEvent("monitor_touch")
-    if targetDevice == peripheral.getName(mon) then
-        for _, box in ipairs(hitboxes) do
-            if x >= box.x1 and x <= box.x2 and y >= box.y1 and y <= box.y2 then
-                box.callback()
-                render()
-                break
-            end
-        end
-    end
-end
+    -- Add / Commit
+    local addLabel = "AD
