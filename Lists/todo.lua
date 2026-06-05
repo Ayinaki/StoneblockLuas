@@ -1107,12 +1107,12 @@ local function drawKeyboardPage()
 
     local w, h = mon.getSize()
 
-    fill(1, 1, w, 3, colors.gray)
+    fill(1, 1, w, 4, colors.gray)
 
     if inputMode == "EDIT" then
-        writeAt(2, 1, "Edit task:", colors.orange, colors.gray)
+        writeAt(2, 1, "EDIT TASK", colors.orange, colors.gray)
     else
-        writeAt(2, 1, "New task:", colors.orange, colors.gray)
+        writeAt(2, 1, "NEW TASK", colors.orange, colors.gray)
     end
 
     local targetName = "ROOT"
@@ -1128,77 +1128,92 @@ local function drawKeyboardPage()
         writeAt(2, 2, truncate("Parent: " .. targetName, w - 4), colors.yellow, colors.gray)
     end
 
+    fill(2, 4, w - 2, 3, colors.lightGray)
+    writeAt(3, 4, "TEXT", colors.cyan, colors.lightGray)
+
     local displayInput = currentInput
-    if #displayInput > w - 6 then
-        displayInput = ".." .. displayInput:sub(-(w - 8))
+    local inputMax = w - 6
+    if #displayInput > inputMax then
+        displayInput = displayInput:sub(#displayInput - inputMax + 2)
     end
-    writeAt(2, 3, displayInput .. "_", colors.white, colors.gray)
+    writeAt(3, 5, truncate(displayInput, w - 6), colors.white, colors.lightGray)
+    writeAt(math.min(w - 2, 3 + #truncate(displayInput, w - 6)), 5, "_", colors.yellow, colors.lightGray)
 
-    local kw = 3
-    local kh = 1
+    writeAt(3, 6, "Tap keys below to type", colors.gray, colors.lightGray)
 
-    local rows = {
+    local keys = {
         { "1","2","3","4","5","6","7","8","9","0" },
         { "Q","W","E","R","T","Y","U","I","O","P" },
         { "A","S","D","F","G","H","J","K","L","-" },
-        { "Z","X","C","V","B","N","M",",","."," " }
+        { "Z","X","C","V","B","N","M",",",".","'" }
     }
 
-    local numCols = 10
-    local totalKbW = numCols * kw + (numCols - 1)
-    local kbStartX = math.floor((w - totalKbW) / 2) + 1
+    local keyW = 4
+    local rowSpacing = 1
+    local colSpacing = 1
+    local kbWidth = (#keys[1] * keyW) + ((#keys[1] - 1) * colSpacing)
+    local startX = math.max(2, math.floor((w - kbWidth) / 2) + 1)
+    local startY = 9
 
-    local actionRowY = h - 1
-    local kbStartY = actionRowY - (#rows * (kh + 1))
-    if kbStartY < 5 then kbStartY = 5 end
+    local function drawKey(x, y, label, bg, fg, callback)
+        fill(x, y, keyW, 1, bg)
+        local tx = x + math.floor((keyW - #label) / 2)
+        writeAt(tx, y, label, fg, bg)
+        registerHitbox(x, x + keyW - 1, y, y, callback)
+    end
 
-    for rIdx, row in ipairs(rows) do
-        local startX = kbStartX
-        local rowY = kbStartY + (rIdx - 1) * (kh + 1)
-
+    for rowIndex, row in ipairs(keys) do
+        local y = startY + (rowIndex - 1) * (1 + rowSpacing)
+        local x = startX
         for _, key in ipairs(row) do
-            local label = (key == " ") and "SPC" or key
-            fill(startX, rowY, kw, kh, colors.lightGray)
-            local lx = startX + math.floor((kw - #label) / 2)
-            writeAt(lx, rowY, label, colors.white, colors.lightGray)
-
             local capturedKey = key
-            registerHitbox(startX, startX + kw - 1, rowY, rowY + kh - 1, function()
+            drawKey(x, y, key, colors.lightGray, colors.white, function()
                 playTone(false)
                 if #currentInput < 60 then
                     currentInput = currentInput .. capturedKey
                 end
             end)
-
-            startX = startX + kw + 1
+            x = x + keyW + colSpacing
         end
     end
 
-    local bY = h
+    local specialY = startY + (#keys * (1 + rowSpacing))
+    local delX = startX
+    local spaceX = delX + (keyW * 2) + 2
+    local spaceW = math.max(10, w - spaceX - 6)
 
-    fill(2, bY, 5, 1, colors.orange)
-    writeAt(3, bY, "<-", colors.black, colors.orange)
-    registerHitbox(2, 6, bY, bY, function()
+    fill(delX, specialY, 8, 1, colors.orange)
+    writeAt(delX + 2, specialY, "DEL", colors.black, colors.orange)
+    registerHitbox(delX, delX + 7, specialY, specialY, function()
         playTone(false)
         currentInput = currentInput:sub(1, -2)
     end)
 
+    fill(spaceX, specialY, spaceW, 1, colors.gray)
+    writeAt(spaceX + math.floor((spaceW - 5) / 2), specialY, "SPACE", colors.white, colors.gray)
+    registerHitbox(spaceX, spaceX + spaceW - 1, specialY, specialY, function()
+        playTone(false)
+        if #currentInput < 60 then
+            currentInput = currentInput .. " "
+        end
+    end)
+
+    local actionY = h
+    local leftX = 2
+
     if inputMode == "ADD" then
-        local rootLabel = "ROOT"
-        local rootX = math.floor(w / 2) - 10
-        fill(rootX - 1, bY, #rootLabel + 2, 1, colors.blue)
-        writeAt(rootX, bY, rootLabel, colors.white, colors.blue)
-        registerHitbox(rootX - 1, rootX + #rootLabel, bY, bY, function()
+        local rootLabel = " ROOT "
+        writeAt(leftX, actionY, rootLabel, colors.white, colors.blue)
+        registerHitbox(leftX, leftX + #rootLabel - 1, actionY, actionY, function()
             playTone(false)
             inputTargetPath = nil
         end)
+        leftX = leftX + #rootLabel + 1
     end
 
-    local canLabel = "CANCEL"
-    local canX = math.floor(w / 2) - math.floor(#canLabel / 2)
-    fill(canX - 1, bY, #canLabel + 2, 1, colors.red)
-    writeAt(canX, bY, canLabel, colors.white, colors.red)
-    registerHitbox(canX - 1, canX + #canLabel, bY, bY, function()
+    local cancelLabel = " CANCEL "
+    writeAt(leftX, actionY, cancelLabel, colors.white, colors.red)
+    registerHitbox(leftX, leftX + #cancelLabel - 1, actionY, actionY, function()
         playTone(true)
         currentInput = ""
         inputMode = "ADD"
@@ -1206,11 +1221,10 @@ local function drawKeyboardPage()
         currentPage = "TREE"
     end)
 
-    local actionLabel = (inputMode == "EDIT") and "SAVE" or "ADD"
-    local actionX = w - #actionLabel - 3
-    fill(actionX - 1, bY, #actionLabel + 2, 1, colors.lime)
-    writeAt(actionX, bY, actionLabel, colors.black, colors.lime)
-    registerHitbox(actionX - 1, actionX + #actionLabel, bY, bY, function()
+    local actionLabel = (inputMode == "EDIT") and " SAVE " or " ADD "
+    local actionX = w - #actionLabel - 1
+    writeAt(actionX, actionY, actionLabel, colors.black, colors.lime)
+    registerHitbox(actionX, actionX + #actionLabel - 1, actionY, actionY, function()
         local trimmed = currentInput:gsub("^%s+", ""):gsub("%s+$", "")
         if trimmed ~= "" then
             playTone(true)
