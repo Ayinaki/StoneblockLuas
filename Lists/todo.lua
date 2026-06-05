@@ -13,20 +13,20 @@ mon.clear()
 -- COLOUR PALETTE
 -- ==========================================
 if mon.isColor() then
-    mon.setPaletteColor(colors.black,     0x0D1117) -- Deep background
-    mon.setPaletteColor(colors.gray,      0x161B22) -- Surface / card bg
-    mon.setPaletteColor(colors.lightGray, 0x21262D) -- Elevated surface
-    mon.setPaletteColor(colors.white,     0xE6EDF3) -- Primary text
-    mon.setPaletteColor(colors.cyan,      0x58A6FF) -- Blue accent
-    mon.setPaletteColor(colors.lime,      0x3FB950) -- Done / confirm green
-    mon.setPaletteColor(colors.red,       0xF85149) -- Delete / abort red
-    mon.setPaletteColor(colors.orange,    0xD29922) -- Pending / backspace amber
-    mon.setPaletteColor(colors.purple,    0xBC8CFF) -- Input cursor accent
-    mon.setPaletteColor(colors.yellow,    0xE3B341) -- Highlight / label
-    mon.setPaletteColor(colors.blue,      0x1F6FEB) -- Button backgrounds
-    mon.setPaletteColor(colors.magenta,   0x388BFD) -- Key hover bg
-    mon.setPaletteColor(colors.brown,     0x30363D) -- Key background
-    mon.setPaletteColor(colors.pink,      0x58A6FF) -- Key text
+    mon.setPaletteColor(colors.black,     0x0D1117)
+    mon.setPaletteColor(colors.gray,      0x161B22)
+    mon.setPaletteColor(colors.lightGray, 0x21262D)
+    mon.setPaletteColor(colors.white,     0xE6EDF3)
+    mon.setPaletteColor(colors.cyan,      0x58A6FF)
+    mon.setPaletteColor(colors.lime,      0x3FB950)
+    mon.setPaletteColor(colors.red,       0xF85149)
+    mon.setPaletteColor(colors.orange,    0xD29922)
+    mon.setPaletteColor(colors.purple,    0xBC8CFF)
+    mon.setPaletteColor(colors.yellow,    0xE3B341)
+    mon.setPaletteColor(colors.blue,      0x1F6FEB)
+    mon.setPaletteColor(colors.magenta,   0x388BFD)
+    mon.setPaletteColor(colors.brown,     0x30363D)
+    mon.setPaletteColor(colors.pink,      0x58A6FF)
 end
 
 local currentPage = "TREE"
@@ -108,10 +108,15 @@ end
 -- UI HELPERS
 -- ==========================================
 local function registerHitbox(x1, x2, y1, y2, callback)
-    table.insert(hitboxes, { x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback })
+    table.insert(hitboxes, {
+        x1 = x1, x2 = x2, y1 = y1, y2 = y2, callback = callback
+    })
 end
 
 local function fill(x, y, width, height, bg)
+    if width == nil or height == nil then return end
+    if width < 1 or height < 1 then return end
+
     mon.setBackgroundColor(bg)
     for i = 0, height - 1 do
         mon.setCursorPos(x, y + i)
@@ -120,6 +125,7 @@ local function fill(x, y, width, height, bg)
 end
 
 local function writeAt(x, y, text, fg, bg)
+    if x == nil or y == nil or text == nil then return end
     mon.setCursorPos(x, y)
     if bg then mon.setBackgroundColor(bg) end
     if fg then mon.setTextColor(fg) end
@@ -138,8 +144,10 @@ local function playTone(isAction)
 end
 
 local function truncate(str, maxLen)
-    if maxLen <= 0 then return "" end
+    str = tostring(str or "")
+    if not maxLen or maxLen <= 0 then return "" end
     if #str > maxLen then
+        if maxLen == 1 then return "~" end
         return str:sub(1, maxLen - 1) .. "~"
     end
     return str
@@ -156,7 +164,7 @@ local function copyPath(path)
 end
 
 local function pathEquals(a, b)
-    if a == nil or b == nil then return false end
+    if type(a) ~= "table" or type(b) ~= "table" then return false end
     if #a ~= #b then return false end
     for i = 1, #a do
         if a[i] ~= b[i] then return false end
@@ -165,7 +173,7 @@ local function pathEquals(a, b)
 end
 
 local function getTaskByPath(path)
-    if not path then return nil end
+    if type(path) ~= "table" then return nil end
 
     local list = todoList
     local task = nil
@@ -180,7 +188,7 @@ local function getTaskByPath(path)
 end
 
 local function getListAndIndexByPath(path)
-    if not path or #path == 0 then
+    if type(path) ~= "table" or #path == 0 then
         return todoList, nil
     end
 
@@ -219,6 +227,7 @@ end
 
 local function countVisibleDone(list)
     local done, total = 0, 0
+
     local function walk(tasks)
         for _, task in ipairs(tasks) do
             total = total + 1
@@ -228,14 +237,16 @@ local function countVisibleDone(list)
             end
         end
     end
+
     walk(list)
     return done, total
 end
 
 local function flattenVisibleTree(tasks, depth, prefixFlags, out, parentPath)
     out = out or {}
-    parentPath = parentPath or {}
+    depth = depth or 0
     prefixFlags = prefixFlags or {}
+    parentPath = parentPath or {}
 
     for i, task in ipairs(tasks) do
         local path = copyPath(parentPath)
@@ -261,21 +272,22 @@ local function flattenVisibleTree(tasks, depth, prefixFlags, out, parentPath)
 end
 
 local function buildTreePrefix(row)
-    if row.depth <= 0 then return "" end
+    local depth = row.depth or 0
+    if depth <= 0 then return "" end
 
     local parts = {}
-    for i = 1, row.depth - 1 do
-        if row.prefixFlags[i] then
-            table.insert(parts, "\179 ")
+    for i = 1, depth - 1 do
+        if row.prefixFlags and row.prefixFlags[i] then
+            table.insert(parts, "| ")
         else
             table.insert(parts, "  ")
         end
     end
 
     if row.isLast then
-        table.insert(parts, "\192 ")
+        table.insert(parts, "\\-")
     else
-        table.insert(parts, "\195 ")
+        table.insert(parts, "+-")
     end
 
     return table.concat(parts)
@@ -339,6 +351,7 @@ end
 local function toggleExpanded(path)
     local task = getTaskByPath(path)
     if not task then return end
+
     if task.subtasks and #task.subtasks > 0 then
         task.expanded = not task.expanded
         saveTasks()
@@ -362,19 +375,15 @@ local function drawTreePage()
     ensureSelectionIsValid()
 
     local w, h = mon.getSize()
-    local rows = flattenVisibleTree(todoList)
+    local rows = flattenVisibleTree(todoList, 0, {}, {}, {})
     local doneCount, totalCount = countVisibleDone(todoList)
 
-    -- Header
     fill(1, 1, w, 3, colors.gray)
     writeAt(2, 1, "TODO TREE", colors.cyan, colors.gray)
     writeAt(2, 2, doneCount .. "/" .. totalCount .. " visible done", colors.orange, colors.gray)
 
     local targetLabel
-    if inputTargetPath then
-        local t = getTaskByPath(inputTargetPath)
-        targetLabel = t and ("Add to: " .. t.text) or "Add to: ROOT"
-    elseif selectedPath then
+    if selectedPath then
         local t = getTaskByPath(selectedPath)
         targetLabel = t and ("Selected: " .. t.text) or "Selected: ROOT"
     else
@@ -382,7 +391,6 @@ local function drawTreePage()
     end
     writeAt(2, 3, truncate(targetLabel, w - 4), colors.yellow, colors.gray)
 
-    -- Right buttons
     local addLabel = "+ Add"
     local addX = w - #addLabel - 2
     writeAt(addX, 1, " " .. addLabel .. " ", colors.black, colors.cyan)
@@ -391,7 +399,6 @@ local function drawTreePage()
         startAddMode()
     end)
 
-    -- Divider
     fill(1, 4, w, 1, colors.lightGray)
     writeAt(2, 4, string.rep("-", math.max(1, w - 2)), colors.gray, colors.lightGray)
 
@@ -405,6 +412,8 @@ local function drawTreePage()
 
     local listStartY = 5
     local listH = h - listStartY
+    if listH < 1 then listH = 1 end
+
     local maxScroll = math.max(0, #rows - listH)
     scrollOffset = math.min(scrollOffset, maxScroll)
 
@@ -427,31 +436,42 @@ local function drawTreePage()
         local task = row.task
         local y = listStartY + (visibleIndex - 1 - scrollOffset)
 
-        local isSelected = selectedPath and pathEquals(selectedPath, row.path)
-        local rowBg = isSelected and colors.lightGray or (((visibleIndex % 2) == 0) and colors.gray or colors.black)
+        local isSelected = false
+        if selectedPath and pathEquals(selectedPath, row.path) then
+            isSelected = true
+        end
+
+        local rowBg
+        if isSelected then
+            rowBg = colors.lightGray
+        elseif (visibleIndex % 2) == 0 then
+            rowBg = colors.gray
+        else
+            rowBg = colors.black
+        end
+
         fill(1, y, w, 1, rowBg)
 
-        -- Checkbox
         local cbText = task.done and "[v]" or "[ ]"
         local cbColor = task.done and colors.lime or colors.red
         writeAt(2, y, cbText, cbColor, rowBg)
+
         local pathCopy1 = copyPath(row.path)
         registerHitbox(2, 4, y, y, function()
             playTone(false)
             toggleDone(pathCopy1)
         end)
 
-        -- Delete button
         local delText = " Del "
         local delX = w - #delText - 1
         writeAt(delX, y, delText, colors.white, colors.red)
+
         local pathCopy2 = copyPath(row.path)
         registerHitbox(delX, delX + #delText - 1, y, y, function()
             playTone(true)
             removeTask(pathCopy2)
         end)
 
-        -- Expand/collapse marker
         local treePrefix = buildTreePrefix(row)
         local marker = " "
         if task.subtasks and #task.subtasks > 0 then
@@ -461,16 +481,17 @@ local function drawTreePage()
         local lineStart = 6
         local treeText = treePrefix .. marker .. " "
         local maxTextW = delX - lineStart - 1
+        if maxTextW < 1 then maxTextW = 1 end
+
         local label = truncate(treeText .. task.text, maxTextW)
 
-        local textColor = task.done and colors.white or colors.white
+        local textColor = colors.white
         if isSelected then
             textColor = colors.yellow
         end
 
         writeAt(lineStart, y, label, textColor, rowBg)
 
-        -- Select / open hitbox across row text
         local pathCopy3 = copyPath(row.path)
         registerHitbox(lineStart, delX - 1, y, y, function()
             playTone(false)
@@ -533,7 +554,6 @@ local function drawKeyboardPage()
 
         for _, key in ipairs(row) do
             local label = (key == " ") and "SPC" or key
-
             fill(startX, rowY, kw, kh, colors.lightGray)
             local lx = startX + math.floor((kw - #label) / 2)
             writeAt(lx, rowY, label, colors.white, colors.lightGray)
@@ -552,7 +572,6 @@ local function drawKeyboardPage()
 
     local bY = h
 
-    -- Backspace
     fill(2, bY, 5, 1, colors.orange)
     writeAt(3, bY, "<-", colors.black, colors.orange)
     registerHitbox(2, 6, bY, bY, function()
@@ -560,7 +579,6 @@ local function drawKeyboardPage()
         currentInput = currentInput:sub(1, -2)
     end)
 
-    -- Root
     local rootLabel = "ROOT"
     local rootX = math.floor(w / 2) - 10
     fill(rootX - 1, bY, #rootLabel + 2, 1, colors.blue)
@@ -570,7 +588,6 @@ local function drawKeyboardPage()
         inputTargetPath = nil
     end)
 
-    -- Cancel
     local canLabel = "CANCEL"
     local canX = math.floor(w / 2) - math.floor(#canLabel / 2)
     fill(canX - 1, bY, #canLabel + 2, 1, colors.red)
@@ -581,7 +598,6 @@ local function drawKeyboardPage()
         currentPage = "TREE"
     end)
 
-    -- Add
     local addLabel = "ADD"
     local addX = w - #addLabel - 3
     fill(addX - 1, bY, #addLabel + 2, 1, colors.lime)
