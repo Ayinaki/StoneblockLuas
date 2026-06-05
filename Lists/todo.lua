@@ -309,6 +309,15 @@ local function countBranchSize(task)
     return total
 end
 
+local function hasCompletedTopLevelTasks()
+    for _, task in ipairs(todoList) do
+        if task.done then
+            return true
+        end
+    end
+    return false
+end
+
 local function flattenVisibleTree(tasks, depth, prefixFlags, out, parentPath)
     out = out or {}
     depth = depth or 0
@@ -518,7 +527,7 @@ local function archiveCompletedBranches()
     refreshParentStates(todoList)
     saveTasks()
 
-    if moved > 0 and selectedPath then
+    if moved > 0 then
         selectedPath = nil
     end
 end
@@ -604,14 +613,13 @@ local function drawGuidePage()
 
     local lines = {
         "1. Tap a task once to select it.",
-        "2. Tap the same task again to",
-        "   expand or collapse subtasks.",
-        "3. Tap [ ] or [v] to toggle a",
-        "   task and its whole branch.",
-        "4. Parent tasks show [done/total].",
-        "5. Pri changes LOW / MED / HIGH.",
+        "2. Tap it again to expand/collapse.",
+        "3. Edit / Delete / Pri only show",
+        "   when a task is selected.",
+        "4. Unselect returns to ROOT.",
+        "5. Parent tasks show [done/total].",
         "6. Sort can reorder the active tree.",
-        "7. Archive rows can be restored",
+        "7. Archive restores finished branches",
         "   back into the active list."
     }
 
@@ -923,16 +931,54 @@ local function drawTreePage()
     fill(1, 4, w, 1, colors.lightGray)
     writeAt(2, 4, string.rep("-", math.max(1, w - 2)), colors.gray, colors.lightGray)
 
+    local actionY = 5
+    local listStartY = 6
     local footerReserved = 1
-    local listStartY = 5
     local listH = h - listStartY - footerReserved
     if listH < 1 then listH = 1 end
+
+    if selectedPath then
+        local unselectLabel = " Unselect "
+        local priLabel = " Priority "
+        local editLabel = " Edit "
+        local delLabel = " Delete "
+
+        local ux = 2
+        writeAt(ux, actionY, unselectLabel, colors.black, colors.blue)
+        registerHitbox(ux, ux + #unselectLabel - 1, actionY, actionY, function()
+            playTone(false)
+            selectedPath = nil
+        end)
+
+        local px = ux + #unselectLabel + 1
+        writeAt(px, actionY, priLabel, colors.white, colors.orange)
+        registerHitbox(px, px + #priLabel - 1, actionY, actionY, function()
+            playTone(true)
+            startPriorityPage(selectedPath)
+        end)
+
+        local ex = px + #priLabel + 1
+        writeAt(ex, actionY, editLabel, colors.black, colors.yellow)
+        registerHitbox(ex, ex + #editLabel - 1, actionY, actionY, function()
+            playTone(true)
+            startEditMode(selectedPath)
+        end)
+
+        local dx = ex + #editLabel + 1
+        writeAt(dx, actionY, delLabel, colors.white, colors.red)
+        registerHitbox(dx, dx + #delLabel - 1, actionY, actionY, function()
+            playTone(true)
+            startDeleteConfirm(selectedPath, "ACTIVE")
+        end)
+    else
+        writeAt(2, actionY, "Tap a task to select it", colors.lightGray, colors.black)
+    end
 
     if #rows == 0 then
         local msg1 = "Nothing here yet!"
         local msg2 = "Tap '+ Add' to create a root task"
-        writeAt(math.floor((w - #msg1) / 2) + 1, 7, msg1, colors.lightGray, colors.black)
-        writeAt(math.floor((w - #msg2) / 2) + 1, 8, msg2, colors.gray, colors.black)
+        writeAt(math.floor((w - #msg1) / 2) + 1, 8, msg1, colors.lightGray, colors.black)
+        writeAt(math.floor((w - #msg2) / 2) + 1, 9, msg2, colors.gray, colors.black)
     else
         local maxScroll = math.max(0, #rows - listH)
         scrollOffset = math.min(scrollOffset, maxScroll)
@@ -982,36 +1028,6 @@ local function drawTreePage()
                 toggleDone(pathCopy1)
             end)
 
-            local delText = " Del "
-            local delX = w - #delText - 1
-            writeAt(delX, y, delText, colors.white, colors.red)
-
-            local pathCopy2 = copyPath(row.path)
-            registerHitbox(delX, delX + #delText - 1, y, y, function()
-                playTone(true)
-                startDeleteConfirm(pathCopy2, "ACTIVE")
-            end)
-
-            local editText = " Edit "
-            local editX = delX - #editText - 1
-            writeAt(editX, y, editText, colors.black, colors.orange)
-
-            local pathCopy4 = copyPath(row.path)
-            registerHitbox(editX, editX + #editText - 1, y, y, function()
-                playTone(true)
-                startEditMode(pathCopy4)
-            end)
-
-            local priText = " Pri "
-            local priX = editX - #priText - 1
-            writeAt(priX, y, priText, colors.white, priorityColor(task.priority))
-
-            local pathCopy5 = copyPath(row.path)
-            registerHitbox(priX, priX + #priText - 1, y, y, function()
-                playTone(true)
-                startPriorityPage(pathCopy5)
-            end)
-
             local treePrefix = buildTreePrefix(row)
             local marker = " "
             if task.subtasks and #task.subtasks > 0 then
@@ -1026,31 +1042,28 @@ local function drawTreePage()
 
             local priLabel = "[" .. task.priority .. "] "
             local lineStart = 6
-            local maxTextW = priX - lineStart - 1
-            if maxTextW < 1 then maxTextW = 1 end
 
             writeAt(lineStart, y, priLabel, priorityColor(task.priority), rowBg)
             local labelX = lineStart + #priLabel
-            local label = truncate(treePrefix .. marker .. " " .. task.text .. suffix, maxTextW - #priLabel)
+            local label = truncate(treePrefix .. marker .. " " .. task.text .. suffix, w - labelX)
             local textColor = isSelected and colors.yellow or colors.white
             writeAt(labelX, y, label, textColor, rowBg)
 
-            local pathCopy3 = copyPath(row.path)
-            registerHitbox(lineStart, priX - 1, y, y, function()
+            local pathCopy2 = copyPath(row.path)
+            registerHitbox(lineStart, w - 1, y, y, function()
                 playTone(false)
-                if selectedPath and pathEquals(selectedPath, pathCopy3) then
-                    toggleExpanded(pathCopy3, todoList)
+                if selectedPath and pathEquals(selectedPath, pathCopy2) then
+                    toggleExpanded(pathCopy2, todoList)
                 else
-                    selectedPath = pathCopy3
+                    selectedPath = pathCopy2
                 end
             end)
         end
     end
 
     local guideLabel = " GUIDE "
-    local archiveLabel = " ARCH "
+    local archiveLabel = " ARCHIVE "
     local sortLabel = " SORT "
-    local archiveDoneLabel = " ARCHIVE DONE "
 
     writeAt(2, h, guideLabel, colors.black, colors.orange)
     registerHitbox(2, 2 + #guideLabel - 1, h, h, function()
@@ -1073,12 +1086,15 @@ local function drawTreePage()
         currentPage = "SORT"
     end)
 
-    local archiveDoneX = w - #archiveDoneLabel - 1
-    writeAt(archiveDoneX, h, archiveDoneLabel, colors.black, colors.lime)
-    registerHitbox(archiveDoneX, archiveDoneX + #archiveDoneLabel - 1, h, h, function()
-        playTone(true)
-        archiveCompletedBranches()
-    end)
+    if hasCompletedTopLevelTasks() then
+        local archiveDoneLabel = " ARCHIVE DONE "
+        local archiveDoneX = w - #archiveDoneLabel - 1
+        writeAt(archiveDoneX, h, archiveDoneLabel, colors.black, colors.lime)
+        registerHitbox(archiveDoneX, archiveDoneX + #archiveDoneLabel - 1, h, h, function()
+            playTone(true)
+            archiveCompletedBranches()
+        end)
+    end
 end
 
 -- ==========================================
