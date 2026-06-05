@@ -47,6 +47,46 @@ local deleteTargetListName = "ACTIVE"
 local priorityTargetPath = nil
 
 -- ==========================================
+-- HELPERS
+-- ==========================================
+local function isRootPath(path)
+    return type(path) == "table" and #path == 1
+end
+
+local function shouldShowPriority(path)
+    return isRootPath(path)
+end
+
+local function priorityRank(priority)
+    if priority == "HIGH" then return 4 end
+    if priority == "MED" then return 3 end
+    if priority == "LOW" then return 2 end
+    return 1
+end
+
+local function priorityColor(priority)
+    if priority == "HIGH" then return colors.red end
+    if priority == "MED" then return colors.orange end
+    if priority == "LOW" then return colors.blue end
+    return colors.lightGray
+end
+
+local function normalizePriority(priority)
+    priority = tostring(priority or "NONE")
+    if priority ~= "NONE" and priority ~= "LOW" and priority ~= "MED" and priority ~= "HIGH" then
+        priority = "NONE"
+    end
+    return priority
+end
+
+local function clearChildPriorities(task)
+    for _, child in ipairs(task.subtasks or {}) do
+        child.priority = "NONE"
+        clearChildPriorities(child)
+    end
+end
+
+-- ==========================================
 -- DATA STORAGE
 -- ==========================================
 local function ensureTaskShape(task)
@@ -55,11 +95,7 @@ local function ensureTaskShape(task)
     task.text = tostring(task.text or "Untitled")
     task.done = task.done == true
     task.expanded = task.expanded ~= false
-    task.priority = tostring(task.priority or "MED")
-
-    if task.priority ~= "LOW" and task.priority ~= "MED" and task.priority ~= "HIGH" then
-        task.priority = "MED"
-    end
+    task.priority = normalizePriority(task.priority)
 
     if type(task.subtasks) ~= "table" then
         task.subtasks = {}
@@ -68,6 +104,7 @@ local function ensureTaskShape(task)
     for i = #task.subtasks, 1, -1 do
         local fixed = ensureTaskShape(task.subtasks[i])
         if fixed then
+            fixed.priority = "NONE"
             task.subtasks[i] = fixed
         else
             table.remove(task.subtasks, i)
@@ -84,6 +121,7 @@ local function normalizeTaskList(list)
     for _, task in ipairs(list) do
         local fixed = ensureTaskShape(task)
         if fixed then
+            clearChildPriorities(fixed)
             table.insert(out, fixed)
         end
     end
@@ -195,12 +233,14 @@ local function cloneTask(task)
         text = task.text,
         done = task.done,
         expanded = task.expanded,
-        priority = task.priority,
+        priority = normalizePriority(task.priority),
         subtasks = {}
     }
 
     for _, child in ipairs(task.subtasks or {}) do
-        table.insert(newTask.subtasks, cloneTask(child))
+        local c = cloneTask(child)
+        c.priority = "NONE"
+        table.insert(newTask.subtasks, c)
     end
 
     return newTask
@@ -378,18 +418,6 @@ local function buildTreePrefix(row)
     return table.concat(parts)
 end
 
-local function priorityRank(priority)
-    if priority == "HIGH" then return 3 end
-    if priority == "MED" then return 2 end
-    return 1
-end
-
-local function priorityColor(priority)
-    if priority == "HIGH" then return colors.red end
-    if priority == "MED" then return colors.orange end
-    return colors.blue
-end
-
 local function ensureSelectionIsValid()
     if selectedPath and not getTaskByPath(selectedPath, todoList) then
         selectedPath = nil
@@ -417,7 +445,7 @@ local function addTask(text)
         text = text,
         done = false,
         expanded = true,
-        priority = "MED",
+        priority = "NONE",
         subtasks = {}
     }
 
@@ -425,6 +453,7 @@ local function addTask(text)
         local parent = getTaskByPath(inputTargetPath, todoList)
         if parent then
             parent.expanded = true
+            newTask.priority = "NONE"
             table.insert(parent.subtasks, newTask)
         else
             table.insert(todoList, newTask)
@@ -445,9 +474,10 @@ local function editTask(path, newText)
 end
 
 local function setTaskPriority(path, priority)
+    if not shouldShowPriority(path) then return end
     local task = getTaskByPath(path, todoList)
     if not task then return end
-    task.priority = priority
+    task.priority = normalizePriority(priority)
     saveTasks()
 end
 
@@ -509,6 +539,7 @@ local function startEditMode(path)
 end
 
 local function startPriorityPage(path)
+    if not shouldShowPriority(path) then return end
     priorityTargetPath = copyPath(path)
     currentPage = "PRIORITY"
 end
@@ -548,6 +579,7 @@ local function restoreArchivedTask(path)
     local restored = table.remove(list, idx)
     if restored then
         restored.expanded = true
+        clearChildPriorities(restored)
         table.insert(todoList, restored)
         refreshParentStates(todoList)
         refreshParentStates(archiveList)
@@ -555,31 +587,39 @@ local function restoreArchivedTask(path)
     end
 end
 
-local function sortListRecursive(list, mode)
+local function sortListRecursive(list, mode, depth)
+    depth = depth or 0
+
     if mode == "AZ" then
         table.sort(list, function(a, b)
             local at = string.lower(a.text or "")
             local bt = string.lower(b.text or "")
-            if at == bt then
+            if depth == 0 and at == bt then
                 return priorityRank(a.priority) > priorityRank(b.priority)
             end
             return at < bt
         end)
     elseif mode == "PRIORITY" then
-        table.sort(list, function(a, b)
-            local ap = priorityRank(a.priority)
-            local bp = priorityRank(b.priority)
-            if ap == bp then
+        if depth == 0 then
+            table.sort(list, function(a, b)
+                local ap = priorityRank(a.priority)
+                local bp = priorityRank(b.priority)
+                if ap == bp then
+                    return string.lower(a.text or "") < string.lower(b.text or "")
+                end
+                return ap > bp
+            end)
+        else
+            table.sort(list, function(a, b)
                 return string.lower(a.text or "") < string.lower(b.text or "")
-            end
-            return ap > bp
-        end)
+            end)
+        end
     elseif mode == "INCOMPLETE" then
         table.sort(list, function(a, b)
             if a.done ~= b.done then
                 return (not a.done) and b.done
             end
-            if priorityRank(a.priority) ~= priorityRank(b.priority) then
+            if depth == 0 and priorityRank(a.priority) ~= priorityRank(b.priority) then
                 return priorityRank(a.priority) > priorityRank(b.priority)
             end
             return string.lower(a.text or "") < string.lower(b.text or "")
@@ -588,13 +628,13 @@ local function sortListRecursive(list, mode)
 
     for _, task in ipairs(list) do
         if task.subtasks and #task.subtasks > 0 then
-            sortListRecursive(task.subtasks, mode)
+            sortListRecursive(task.subtasks, mode, depth + 1)
         end
     end
 end
 
 local function applySort(mode)
-    sortListRecursive(todoList, mode)
+    sortListRecursive(todoList, mode, 0)
     saveTasks()
 end
 
@@ -623,12 +663,11 @@ local function drawGuidePage()
     local lines = {
         "1. Tap a task once to select it.",
         "2. Tap it again to expand/collapse.",
-        "3. Edit / Delete / Pri only show",
-        "   when a task is selected.",
+        "3. Only root tasks use priority.",
         "4. Unselect returns to ROOT.",
         "5. Root trees have blank spacing",
         "   between each top-level branch.",
-        "6. Sort can reorder the active tree.",
+        "6. Sort affects the active tree.",
         "7. Archive restores finished branches."
     }
 
@@ -702,8 +741,9 @@ local function drawPriorityPage()
     end
 
     local options = {
-        { label = "LOW", color = colors.blue },
-        { label = "MED", color = colors.orange },
+        { label = "NONE", color = colors.lightGray },
+        { label = "LOW",  color = colors.blue },
+        { label = "MED",  color = colors.orange },
         { label = "HIGH", color = colors.red }
     }
 
@@ -823,11 +863,14 @@ local function drawArchivePage()
                 suffix = " [" .. doneCount .. "/" .. totalCount .. "]"
             end
 
-            local pri = "[" .. (task.priority or "MED") .. "] "
-            local priColor = priorityColor(task.priority or "MED")
+            local textStart = 2
+            if row.depth == 0 then
+                local pri = "[" .. normalizePriority(task.priority) .. "] "
+                writeAt(textStart, y, pri, priorityColor(task.priority), rowBg)
+                textStart = textStart + #pri
+            end
 
-            writeAt(2, y, pri, priColor, rowBg)
-            writeAt(2 + #pri, y, truncate(treePrefix .. marker .. " " .. task.text .. suffix, restoreX - (3 + #pri)), colors.lightGray, rowBg)
+            writeAt(textStart, y, truncate(treePrefix .. marker .. " " .. task.text .. suffix, restoreX - textStart - 1), colors.lightGray, rowBg)
         end
     end
 end
@@ -865,10 +908,8 @@ local function drawDeleteConfirmPage()
     local sourceText = (deleteTargetListName == "ARCHIVE") and "From: Archive" or "From: Active list"
     writeAt(2, 3, truncate(sourceText .. " | Branch size: " .. countBranchSize(task), w - 4), colors.white, colors.red)
 
-    local msg1 = "This will remove the selected task"
-    local msg2 = "and all of its subtasks."
-    writeAt(2, 6, truncate(msg1, w - 3), colors.lightGray, colors.black)
-    writeAt(2, 7, truncate(msg2, w - 3), colors.lightGray, colors.black)
+    writeAt(2, 6, "This will remove the selected task", colors.lightGray, colors.black)
+    writeAt(2, 7, "and all of its subtasks.", colors.lightGray, colors.black)
 
     local cancelLabel = " CANCEL "
     local deleteLabel = " DELETE "
@@ -941,14 +982,14 @@ local function drawTreePage()
     writeAt(2, 4, string.rep("-", math.max(1, w - 2)), colors.gray, colors.lightGray)
 
     local actionY = 5
-    local listStartY = 6
+    local spacerY = 6
+    local listStartY = 7
     local footerReserved = 1
     local listH = h - listStartY - footerReserved
     if listH < 1 then listH = 1 end
 
     if selectedPath then
         local unselectLabel = " Unselect "
-        local priLabel = " Priority "
         local editLabel = " Edit "
         local delLabel = " Delete "
 
@@ -959,23 +1000,28 @@ local function drawTreePage()
             selectedPath = nil
         end)
 
-        local px = ux + #unselectLabel + 1
-        writeAt(px, actionY, priLabel, colors.white, colors.orange)
-        registerHitbox(px, px + #priLabel - 1, actionY, actionY, function()
-            playTone(true)
-            startPriorityPage(selectedPath)
-        end)
+        local nextX = ux + #unselectLabel + 1
 
-        local ex = px + #priLabel + 1
-        writeAt(ex, actionY, editLabel, colors.black, colors.yellow)
-        registerHitbox(ex, ex + #editLabel - 1, actionY, actionY, function()
+        if shouldShowPriority(selectedPath) then
+            local priLabel = " Priority "
+            writeAt(nextX, actionY, priLabel, colors.white, colors.orange)
+            registerHitbox(nextX, nextX + #priLabel - 1, actionY, actionY, function()
+                playTone(true)
+                startPriorityPage(selectedPath)
+            end)
+            nextX = nextX + #priLabel + 1
+        end
+
+        writeAt(nextX, actionY, editLabel, colors.black, colors.yellow)
+        registerHitbox(nextX, nextX + #editLabel - 1, actionY, actionY, function()
             playTone(true)
             startEditMode(selectedPath)
         end)
 
-        local dx = ex + #editLabel + 1
-        writeAt(dx, actionY, delLabel, colors.white, colors.red)
-        registerHitbox(dx, dx + #delLabel - 1, actionY, actionY, function()
+        nextX = nextX + #editLabel + 1
+
+        writeAt(nextX, actionY, delLabel, colors.white, colors.red)
+        registerHitbox(nextX, nextX + #delLabel - 1, actionY, actionY, function()
             playTone(true)
             startDeleteConfirm(selectedPath, "ACTIVE")
         end)
@@ -983,11 +1029,11 @@ local function drawTreePage()
         writeAt(2, actionY, "Tap a task to select it", colors.lightGray, colors.black)
     end
 
+    fill(1, spacerY, w, 1, colors.black)
+
     if #rows == 0 then
-        local msg1 = "Nothing here yet!"
-        local msg2 = "Tap '+ Add' to create a root task"
-        writeAt(math.floor((w - #msg1) / 2) + 1, 8, msg1, colors.lightGray, colors.black)
-        writeAt(math.floor((w - #msg2) / 2) + 1, 9, msg2, colors.gray, colors.black)
+        writeAt(math.floor((w - 17) / 2) + 1, 9, "Nothing here yet!", colors.lightGray, colors.black)
+        writeAt(math.floor((w - 31) / 2) + 1, 10, "Tap '+ Add' to create a root task", colors.gray, colors.black)
     else
         local maxScroll = math.max(0, #rows - listH)
         scrollOffset = math.min(scrollOffset, maxScroll)
@@ -1014,11 +1060,7 @@ local function drawTreePage()
                 fill(1, y, w, 1, colors.black)
             else
                 local task = row.task
-
-                local isSelected = false
-                if selectedPath and pathEquals(selectedPath, row.path) then
-                    isSelected = true
-                end
+                local isSelected = selectedPath and pathEquals(selectedPath, row.path) or false
 
                 local rowBg
                 if isSelected then
@@ -1053,17 +1095,19 @@ local function drawTreePage()
                     suffix = " [" .. doneBranch .. "/" .. totalBranch .. "]"
                 end
 
-                local priLabel = "[" .. task.priority .. "] "
-                local lineStart = 6
+                local textStart = 6
+                if row.depth == 0 then
+                    local priLabel = "[" .. normalizePriority(task.priority) .. "] "
+                    writeAt(textStart, y, priLabel, priorityColor(task.priority), rowBg)
+                    textStart = textStart + #priLabel
+                end
 
-                writeAt(lineStart, y, priLabel, priorityColor(task.priority), rowBg)
-                local labelX = lineStart + #priLabel
-                local label = truncate(treePrefix .. marker .. " " .. task.text .. suffix, w - labelX)
+                local label = truncate(treePrefix .. marker .. " " .. task.text .. suffix, w - textStart)
                 local textColor = isSelected and colors.yellow or colors.white
-                writeAt(labelX, y, label, textColor, rowBg)
+                writeAt(textStart, y, label, textColor, rowBg)
 
                 local pathCopy2 = copyPath(row.path)
-                registerHitbox(lineStart, w - 1, y, y, function()
+                registerHitbox(6, w - 1, y, y, function()
                     playTone(false)
                     if selectedPath and pathEquals(selectedPath, pathCopy2) then
                         toggleExpanded(pathCopy2, todoList)
