@@ -97,7 +97,7 @@ local function drawButton(x, y, width, height, text, mainColor, textColor)
 end
 
 -- ==========================================
--- MAIN VIEW: CHECKBOX TASK BOARD
+-- MAIN VIEW: STREAMLINED TASK BOARD
 -- ==========================================
 local function drawListPage()
     mon.setBackgroundColor(colors.gray)
@@ -105,12 +105,11 @@ local function drawListPage()
     hitboxes = {}
     local w, h = mon.getSize()
 
-    -- Header Panel
-    fill(1, 1, w, 2, colors.lightGray)
-    writeAt(2, 1, "FACTORY OPERATIONS PROTOCOL", colors.cyan, colors.lightGray)
-    writeAt(2, 2, "ACTIVE DEVELOPMENT LOGS", colors.orange, colors.lightGray)
+    -- Clean Single-Row Header Bar
+    fill(1, 1, w, 1, colors.lightGray)
+    writeAt(2, 1, "LIST", colors.cyan, colors.lightGray)
 
-    -- Add Task Button
+    -- Sized Down Add Task Button (Single Row)
     local abw = 10
     local abx = w - abw - 1
     drawButton(abx, 1, abw, 1, "[+ TASK]", colors.cyan, colors.gray)
@@ -122,47 +121,46 @@ local function drawListPage()
 
     -- Empty State Notice
     if #todoList == 0 then
-        writeAt(math.floor((w - 18) / 2) + 1, 6, "NO ACTIVE PROTOCOLS", colors.lightGray, colors.gray)
-        writeAt(math.floor((w - 24) / 2) + 1, 7, "TAP [+ TASK] TO INITIALIZE", colors.gray, colors.gray)
+        writeAt(math.floor((w - 18) / 2) + 1, 5, "NO ACTIVE PROTOCOLS", colors.lightGray, colors.gray)
+        writeAt(math.floor((w - 24) / 2) + 1, 6, "TAP [+ TASK] TO INITIALIZE", colors.gray, colors.gray)
         return
     end
 
     -- Item Rendering Loop
-    local startY = 4
+    local startY = 3 -- Shifted up since header row is shorter
     for i, task in ipairs(todoList) do
-        if startY + 2 > h then break end
+        if startY + 1 > h then break end
 
-        -- Row background panel
-        fill(2, startY, w - 2, 2, colors.lightGray)
+        -- Shrunk row panel down to 1 row tall for maximum vertical space
+        fill(2, startY, w - 2, 1, colors.lightGray)
 
-        -- FIXED: Pure classic Checkbox layout [ ] vs [X] with clean margins
-        local cbText = task.done and "  [X]  " or "  [ ]  "
+        -- 1. Pure Checkbox Layout [ ] vs [X] (1 row tall)
+        local cbText = task.done and " [X] " or " [ ] "
         local cbColor = task.done and colors.lime or colors.red
         local cbTextColor = task.done and colors.gray or colors.white
-        drawButton(3, startY, 7, 2, cbText, cbColor, cbTextColor)
+        drawButton(3, startY, 5, 1, cbText, cbColor, cbTextColor)
         
         local idx = i
-        registerHitbox(3, 9, startY, startY + 1, function()
+        registerHitbox(3, 7, startY, startY, function()
             playTone(false)
             todoList[idx].done = not todoList[idx].done
             saveTasks()
         end)
 
-        -- Task Label Layout (Shifted left slightly since the checkbox is smaller)
+        -- 2. Clean Task Label String (Centered vertically on the single line)
         local textFg = task.done and colors.orange or colors.white
-        writeAt(12, startY, string.sub(task.text, 1, w - 22), textFg, colors.lightGray)
-        writeAt(12, startY + 1, "INDEX LOG #" .. string.format("%02d", i), colors.gray, colors.lightGray)
+        writeAt(10, startY, string.sub(task.text, 1, w - 20), textFg, colors.lightGray)
 
-        -- Action Delete Button
+        -- 3. Action Delete Button (1 row tall)
         local delX = w - 8
-        drawButton(delX, startY, 7, 2, "CLEAR", colors.red, colors.white)
-        registerHitbox(delX, delX + 6, startY, startY + 1, function()
+        drawButton(delX, startY, 7, 1, "CLEAR", colors.red, colors.white)
+        registerHitbox(delX, delX + 6, startY, startY, function()
             playTone(true)
             table.remove(todoList, idx)
             saveTasks()
         end)
 
-        startY = startY + 3
+        startY = startY + 2 -- Clean 1-block spacing gap between panels
     end
 end
 
@@ -201,7 +199,7 @@ local function drawKeyboardPage()
             local capturedKey = key
             registerHitbox(startX, startX + kw - 1, startY, startY + kh - 1, function()
                 playTone(false)
-                if #currentInput < w - 22 then
+                if #currentInput < w - 20 then
                     currentInput = currentInput .. capturedKey
                 end
             end)
@@ -226,7 +224,7 @@ local function drawKeyboardPage()
         currentPage = "LIST"
     end)
 
-    -- Save/Commit
+    -- Save
     local svX = w - 11
     drawButton(svX, btnY, 10, 2, "COMMIT", colors.lime, colors.gray)
     registerHitbox(svX, svX + 9, btnY, btnY + 1, function()
