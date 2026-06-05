@@ -127,14 +127,13 @@ local function drawListPage()
     end
 
     -- Item Rendering Loop
-    local startY = 3 -- Shifted up since header row is shorter
+    local startY = 3
     for i, task in ipairs(todoList) do
         if startY + 1 > h then break end
 
-        -- Shrunk row panel down to 1 row tall for maximum vertical space
         fill(2, startY, w - 2, 1, colors.lightGray)
 
-        -- 1. Pure Checkbox Layout [ ] vs [X] (1 row tall)
+        -- Checkbox
         local cbText = task.done and " [X] " or " [ ] "
         local cbColor = task.done and colors.lime or colors.red
         local cbTextColor = task.done and colors.gray or colors.white
@@ -147,11 +146,11 @@ local function drawListPage()
             saveTasks()
         end)
 
-        -- 2. Clean Task Label String (Centered vertically on the single line)
+        -- Label
         local textFg = task.done and colors.orange or colors.white
         writeAt(10, startY, string.sub(task.text, 1, w - 20), textFg, colors.lightGray)
 
-        -- 3. Action Delete Button (1 row tall)
+        -- Clear Button
         local delX = w - 8
         drawButton(delX, startY, 7, 1, "CLEAR", colors.red, colors.white)
         registerHitbox(delX, delX + 6, startY, startY, function()
@@ -160,12 +159,12 @@ local function drawListPage()
             saveTasks()
         end)
 
-        startY = startY + 2 -- Clean 1-block spacing gap between panels
+        startY = startY + 2
     end
 end
 
 -- ==========================================
--- ON-SCREEN KEYBOARD OVERLAY
+-- REPROPORTIONED KEYBOARD OVERLAY
 -- ==========================================
 local function drawKeyboardPage()
     mon.setBackgroundColor(colors.gray)
@@ -173,8 +172,9 @@ local function drawKeyboardPage()
     hitboxes = {}
     local w, h = mon.getSize()
 
+    -- Simplified Header Bar Config
     fill(1, 1, w, 2, colors.lightGray)
-    writeAt(2, 1, "SYSTEM DIALOG INPUT REQUEST:", colors.orange, colors.lightGray)
+    writeAt(2, 1, "NAME OF TASK/ITEM:", colors.orange, colors.lightGray)
     writeAt(2, 2, ">> " .. currentInput .. "_", colors.white, colors.lightGray)
 
     local rows = {
@@ -184,17 +184,19 @@ local function drawKeyboardPage()
         { "Z", "X", "C", "V", "B", "N", "M", ",", ".", " " }
     }
 
-    local kw = 3
+    -- Proportional Sizing Variables for 3x3 Monitors
+    local kw = 4 -- Expanded key text scale boundary widths
     local kh = 2
     local startY = 4
 
     for rIdx, row in ipairs(rows) do
+        -- Dynamically offset layout horizontally to stretch edge-to-edge seamlessly
         local startX = math.floor((w - (#row * (kw + 1))) / 2) + 1
         for _, key in ipairs(row) do
             local label = key == " " and "SPC" or key
             
             fill(startX, startY, kw, kh, colors.lightGray)
-            writeAt(startX + math.floor((kw - #label)/2), startY, label, colors.white, colors.lightGray)
+            writeAt(startX + math.floor((kw - #label)/2), startY + 1, label, colors.white, colors.lightGray)
 
             local capturedKey = key
             registerHitbox(startX, startX + kw - 1, startY, startY + kh - 1, function()
@@ -205,29 +207,27 @@ local function drawKeyboardPage()
             end)
             startX = startX + kw + 1
         end
-        startY = startY + kh + 1
+        startY = startY + kh + 1 -- Shrunk inner padding down to 1 row
     end
 
     local btnY = h - 2
     
-    -- Backspace
-    drawButton(2, btnY, 6, 2, "[<-]", colors.orange, colors.gray)
-    registerHitbox(2, 7, btnY, btnY + 1, function()
+    -- Balanced Bottom Operations Buttons Alignment
+    drawButton(3, btnY, 8, 2, "[<-]", colors.orange, colors.gray)
+    registerHitbox(3, 10, btnY, btnY + 1, function()
         playTone(false)
         currentInput = string.sub(currentInput, 1, #currentInput - 1)
     end)
 
-    -- Cancel
-    drawButton(9, btnY, 8, 2, "ABORT", colors.red, colors.white)
-    registerHitbox(9, 16, btnY, btnY + 1, function()
+    drawButton(13, btnY, 10, 2, "ABORT", colors.red, colors.white)
+    registerHitbox(13, 22, btnY, btnY + 1, function()
         playTone(true)
         currentPage = "LIST"
     end)
 
-    -- Save
-    local svX = w - 11
-    drawButton(svX, btnY, 10, 2, "COMMIT", colors.lime, colors.gray)
-    registerHitbox(svX, svX + 9, btnY, btnY + 1, function()
+    local svX = w - 13
+    drawButton(svX, btnY, 11, 2, "COMMIT", colors.lime, colors.gray)
+    registerHitbox(svX, svX + 10, btnY, btnY + 1, function()
         if currentInput ~= "" then
             playTone(true)
             table.insert(todoList, { text = currentInput, done = false })
@@ -242,7 +242,7 @@ local function render()
 end
 
 -- ==========================================
--- SYSTEM STARTUP INITIALIZER
+-- INITIALIZER
 -- ==========================================
 loadTasks()
 render()
