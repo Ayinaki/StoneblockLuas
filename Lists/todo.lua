@@ -667,8 +667,7 @@ local function drawGuidePage()
     writeAt(2, 1, "GUIDE", colors.cyan, colors.gray)
     writeAt(2, 2, "How to use the task tree", colors.yellow, colors.gray)
 
-    local backLabel = "BACK"
-    local backW = drawButton(w - (#backLabel + 2) - 1, 1, backLabel, colors.red, colors.white, function()
+    drawButton(w - 8, 1, "BACK", colors.red, colors.white, function()
         playTone(true)
         currentPage = "TREE"
     end)
@@ -888,7 +887,7 @@ local function drawArchivePage()
                 textStart = textStart + #pri
             end
 
-            writeAt(textStart, y, truncate(treePrefix .. marker .. " " .. task.text .. suffix, restoreX - textStart - 1), colors.lightGray, rowBg)
+            writeAt(textStart, y, truncate(treePrefix .. marker .. " " .. task.text .. suffix, restoreX - textStart - 1), colors.white, rowBg)
         end
     end
 
