@@ -13,8 +13,8 @@ if mon.isColor() then
     mon.setPaletteColor(colors.gray,      0x1F2937) -- Dark Charcoal Canvas
     mon.setPaletteColor(colors.lightGray, 0x4B5563) -- Slate Row Strips
     mon.setPaletteColor(colors.cyan,      0x06B6D4) -- Neon Add Button Accent
-    mon.setPaletteColor(colors.lime,      0x10B981) -- Emerald Checkmark Green
-    mon.setPaletteColor(colors.red,       0xEF4444) -- Crimson Delete Red
+    mon.setPaletteColor(colors.lime,      0x10B981) -- Cyber Emerald Green
+    mon.setPaletteColor(colors.red,       0xEF4444) -- Crimson Alert Red
 end
 
 local currentPage = "LIST" -- "LIST" or "KEYBOARD"
@@ -83,8 +83,21 @@ end
 local function playTone(isAction)
     if not speaker then return end
     pcall(function()
-        if isAction then speaker.playNote("chime", 0.9, 12) else speaker.playNote("harp", 0.7, 5) end
-     pcall end)
+        if isAction then 
+            speaker.playNote("chime", 0.9, 12) 
+        else 
+            speaker.playNote("harp", 0.7, 5) 
+        end
+    end) -- FIXED: Safely closed the pcall function block here
+end
+
+local function drawButton(x, y, width, height, text, mainColor, textColor)
+    fill(x, y, width, height, mainColor)
+    local tx = x + math.max(0, math.floor((width - #text) / 2))
+    local ty = y + math.floor(height / 2)
+    writeAt(tx, ty, text, textColor, mainColor)
+    mon.setBackgroundColor(colors.black)
+    mon.setTextColor(colors.white)
 end
 
 -- ==========================================
@@ -117,7 +130,7 @@ local function drawListPage()
     -- Item List Loop Rendering
     local startY = 4
     for i, task in ipairs(todoList) do
-        if startY + 2 > h then break end -- Scroll guard to maintain maximum layout scale
+        if startY + 2 > h then break end -- Scroll guard
 
         -- 1. Checkbox Box Button
         local cbColor = task.done and colors.lime or colors.red
@@ -184,7 +197,6 @@ local function drawKeyboardPage()
         local startX = math.floor((w - (#row * (kw + 1))) / 2) + 1
         for _, key in ipairs(row) do
             local label = key == " " and "SPC" or key
-            drawButton = drawButton -- Local mapping placeholder
             
             fill(startX, startY, kw, kh, colors.lightGray)
             writeAt(startX + math.floor((kw - #label)/2), startY, label, colors.white, colors.lightGray)
@@ -205,14 +217,14 @@ local function drawKeyboardPage()
     local btnY = h - 2
     
     -- Backspace Left Arrow
-    drawButton(2, btnY, 6, 2, "[<-]", colors.orange, colors.white, false)
+    drawButton(2, btnY, 6, 2, "[<-]", colors.orange, colors.white)
     registerHitbox(2, 7, btnY, btnY + 1, function()
         playTone(false)
         currentInput = string.sub(currentInput, 1, #currentInput - 1)
     end)
 
     -- Cancel Operational Reset
-    drawButton(9, btnY, 8, 2, "CANCEL", colors.red, colors.white, false)
+    drawButton(9, btnY, 8, 2, "CANCEL", colors.red, colors.white)
     registerHitbox(9, 16, btnY, btnY + 1, function()
         playTone(true)
         currentPage = "LIST"
@@ -220,7 +232,7 @@ local function drawKeyboardPage()
 
     -- Save/Confirm Target Item Commit
     local svX = w - 9
-    drawButton(svX, btnY, 8, 2, "SAVE", colors.lime, colors.black, false)
+    drawButton(svX, btnY, 8, 2, "SAVE", colors.lime, colors.black)
     registerHitbox(svX, svX + 7, btnY, btnY + 1, function()
         if currentInput ~= "" then
             playTone(true)
