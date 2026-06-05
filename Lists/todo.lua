@@ -38,6 +38,8 @@ local SAVE_FILE = "/todo_items.txt"
 local scrollOffset = 0
 local selectedPath = nil
 local inputTargetPath = nil
+local inputMode = "ADD"
+local editingPath = nil
 
 -- ==========================================
 -- DATA STORAGE
@@ -300,6 +302,9 @@ local function ensureSelectionIsValid()
     if inputTargetPath and not getTaskByPath(inputTargetPath) then
         inputTargetPath = nil
     end
+    if editingPath and not getTaskByPath(editingPath) then
+        editingPath = nil
+    end
 end
 
 local function addTask(text)
@@ -323,6 +328,13 @@ local function addTask(text)
     end
 
     refreshParentStates(todoList)
+    saveTasks()
+end
+
+local function editTask(path, newText)
+    local task = getTaskByPath(path)
+    if not task then return end
+    task.text = newText
     saveTasks()
 end
 
@@ -361,6 +373,18 @@ end
 local function startAddMode()
     currentInput = ""
     inputTargetPath = selectedPath and copyPath(selectedPath) or nil
+    editingPath = nil
+    inputMode = "ADD"
+    currentPage = "KEYBOARD"
+end
+
+local function startEditMode(path)
+    local task = getTaskByPath(path)
+    if not task then return end
+    currentInput = task.text
+    editingPath = copyPath(path)
+    inputTargetPath = nil
+    inputMode = "EDIT"
     currentPage = "KEYBOARD"
 end
 
@@ -389,14 +413,13 @@ local function drawGuidePage()
     local lines = {
         "1. Tap a task once to select it.",
         "2. Tap the same task again to",
-        "   expand or collapse its subtasks.",
-        "3. Tap [ ] or [v] to mark a task",
-        "   and all its children done/undone.",
+        "   expand or collapse subtasks.",
+        "3. Tap [ ] or [v] to toggle a",
+        "   task and its whole branch.",
         "4. Tap + Add to add under the",
         "   selected task.",
-        "5. If nothing is selected, + Add",
-        "   creates a root task.",
-        "6. Tap Del to remove that branch.",
+        "5. Tap Edit to rename a task.",
+        "6. Tap Del to remove a branch.",
         "7. GUIDE opens this help page."
     }
 
@@ -529,6 +552,16 @@ local function drawTreePage()
             removeTask(pathCopy2)
         end)
 
+        local editText = " Edit "
+        local editX = delX - #editText - 1
+        writeAt(editX, y, editText, colors.black, colors.orange)
+
+        local pathCopy4 = copyPath(row.path)
+        registerHitbox(editX, editX + #editText - 1, y, y, function()
+            playTone(true)
+            startEditMode(pathCopy4)
+        end)
+
         local treePrefix = buildTreePrefix(row)
         local marker = " "
         if task.subtasks and #task.subtasks > 0 then
@@ -537,7 +570,7 @@ local function drawTreePage()
 
         local lineStart = 6
         local treeText = treePrefix .. marker .. " "
-        local maxTextW = delX - lineStart - 1
+        local maxTextW = editX - lineStart - 1
         if maxTextW < 1 then maxTextW = 1 end
 
         local label = truncate(treeText .. task.text, maxTextW)
@@ -550,7 +583,7 @@ local function drawTreePage()
         writeAt(lineStart, y, label, textColor, rowBg)
 
         local pathCopy3 = copyPath(row.path)
-        registerHitbox(lineStart, delX - 1, y, y, function()
+        registerHitbox(lineStart, editX - 1, y, y, function()
             playTone(false)
             if selectedPath and pathEquals(selectedPath, pathCopy3) then
                 toggleExpanded(pathCopy3)
@@ -579,14 +612,25 @@ local function drawKeyboardPage()
     local w, h = mon.getSize()
 
     fill(1, 1, w, 3, colors.gray)
-    writeAt(2, 1, "New task:", colors.orange, colors.gray)
+
+    if inputMode == "EDIT" then
+        writeAt(2, 1, "Edit task:", colors.orange, colors.gray)
+    else
+        writeAt(2, 1, "New task:", colors.orange, colors.gray)
+    end
 
     local targetName = "ROOT"
-    if inputTargetPath then
-        local parent = getTaskByPath(inputTargetPath)
-        if parent then targetName = parent.text end
+    if inputMode == "EDIT" then
+        local t = getTaskByPath(editingPath)
+        if t then targetName = t.text end
+        writeAt(2, 2, truncate("Editing: " .. targetName, w - 4), colors.yellow, colors.gray)
+    else
+        if inputTargetPath then
+            local parent = getTaskByPath(inputTargetPath)
+            if parent then targetName = parent.text end
+        end
+        writeAt(2, 2, truncate("Parent: " .. targetName, w - 4), colors.yellow, colors.gray)
     end
-    writeAt(2, 2, truncate("Parent: " .. targetName, w - 4), colors.yellow, colors.gray)
 
     local displayInput = currentInput
     if #displayInput > w - 6 then
@@ -643,14 +687,16 @@ local function drawKeyboardPage()
         currentInput = currentInput:sub(1, -2)
     end)
 
-    local rootLabel = "ROOT"
-    local rootX = math.floor(w / 2) - 10
-    fill(rootX - 1, bY, #rootLabel + 2, 1, colors.blue)
-    writeAt(rootX, bY, rootLabel, colors.white, colors.blue)
-    registerHitbox(rootX - 1, rootX + #rootLabel, bY, bY, function()
-        playTone(false)
-        inputTargetPath = nil
-    end)
+    if inputMode == "ADD" then
+        local rootLabel = "ROOT"
+        local rootX = math.floor(w / 2) - 10
+        fill(rootX - 1, bY, #rootLabel + 2, 1, colors.blue)
+        writeAt(rootX, bY, rootLabel, colors.white, colors.blue)
+        registerHitbox(rootX - 1, rootX + #rootLabel, bY, bY, function()
+            playTone(false)
+            inputTargetPath = nil
+        end)
+    end
 
     local canLabel = "CANCEL"
     local canX = math.floor(w / 2) - math.floor(#canLabel / 2)
@@ -659,19 +705,27 @@ local function drawKeyboardPage()
     registerHitbox(canX - 1, canX + #canLabel, bY, bY, function()
         playTone(true)
         currentInput = ""
+        inputMode = "ADD"
+        editingPath = nil
         currentPage = "TREE"
     end)
 
-    local addLabel = "ADD"
-    local addX = w - #addLabel - 3
-    fill(addX - 1, bY, #addLabel + 2, 1, colors.lime)
-    writeAt(addX, bY, addLabel, colors.black, colors.lime)
-    registerHitbox(addX - 1, addX + #addLabel, bY, bY, function()
+    local actionLabel = (inputMode == "EDIT") and "SAVE" or "ADD"
+    local actionX = w - #actionLabel - 3
+    fill(actionX - 1, bY, #actionLabel + 2, 1, colors.lime)
+    writeAt(actionX, bY, actionLabel, colors.black, colors.lime)
+    registerHitbox(actionX - 1, actionX + #actionLabel, bY, bY, function()
         local trimmed = currentInput:gsub("^%s+", ""):gsub("%s+$", "")
         if trimmed ~= "" then
             playTone(true)
-            addTask(trimmed)
+            if inputMode == "EDIT" then
+                editTask(editingPath, trimmed)
+            else
+                addTask(trimmed)
+            end
             currentInput = ""
+            inputMode = "ADD"
+            editingPath = nil
             currentPage = "TREE"
         end
     end)
