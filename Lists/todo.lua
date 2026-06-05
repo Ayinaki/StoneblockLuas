@@ -108,16 +108,16 @@ local function drawListPage()
 
     -- ── Header bar ──────────────────────────────────────────
     fill(1, 1, w, 2, colors.gray)
-    -- Left: title
     writeAt(2, 1, "TODO LIST", colors.cyan, colors.gray)
-    -- Task count
+
     local total = #todoList
     local done  = 0
-    for _, t in ipairs(todoList) do if t.done then done = done + 1 end end
+    for _, t in ipairs(todoList) do
+        if t.done then done = done + 1 end
+    end
     local countStr = done .. "/" .. total .. " done"
     writeAt(2, 2, countStr, colors.orange, colors.gray)
 
-    -- Right: + Add button
     local addLabel = "+ Add"
     local ax = w - #addLabel - 2
     writeAt(ax, 1, " " .. addLabel .. " ", colors.black, colors.cyan)
@@ -128,7 +128,6 @@ local function drawListPage()
         currentPage = "KEYBOARD"
     end)
 
-    -- Divider
     fill(1, 3, w, 1, colors.lightGray)
     writeAt(2, 3, string.rep("-", w - 2), colors.gray, colors.lightGray)
 
@@ -141,12 +140,11 @@ local function drawListPage()
         return
     end
 
-    -- ── Scroll arrows ─────────────────────────────────────────
-    -- Each item occupies 1 row
+    -- ── Scroll arrows ───────────────────────────────────────
     local listStartY = 4
-    local listH      = h - listStartY  -- usable rows
-    local maxScroll  = math.max(0, #todoList - listH)
-    scrollOffset     = math.min(scrollOffset, maxScroll)
+    local listH = h - listStartY
+    local maxScroll = math.max(0, #todoList - listH)
+    scrollOffset = math.min(scrollOffset, maxScroll)
 
     if scrollOffset > 0 then
         writeAt(w, listStartY, "^", colors.cyan, colors.black)
@@ -154,6 +152,7 @@ local function drawListPage()
             scrollOffset = math.max(0, scrollOffset - 1)
         end)
     end
+
     if scrollOffset < maxScroll then
         writeAt(w, h, "v", colors.cyan, colors.black)
         registerHitbox(w, w, h, h, function()
@@ -166,14 +165,13 @@ local function drawListPage()
         local task = todoList[i]
         local rowY = listStartY + (i - 1 - scrollOffset)
 
-        -- Row bg (alternating)
         local rowBg = (i % 2 == 0) and colors.gray or colors.black
         fill(1, rowY, w, 1, rowBg)
 
-        -- Checkbox  [v] or [ ]
         local cbSymbol = task.done and "[v]" or "[ ]"
-        local cbColor  = task.done and colors.lime or colors.red
+        local cbColor = task.done and colors.lime or colors.red
         writeAt(2, rowY, cbSymbol, cbColor, rowBg)
+
         local idx = i
         registerHitbox(2, 4, rowY, rowY, function()
             playTone(false)
@@ -181,18 +179,15 @@ local function drawListPage()
             saveTasks()
         end)
 
-        -- Task text
-        local textFg = task.done and colors.lightGray or colors.white
-        local maxTextW = w - 14  -- leave room for checkbox + del button
+        local maxTextW = w - 14
         local label = truncate(task.text, maxTextW)
+
         if task.done then
-            -- strikethrough simulation: prefix with ~
             writeAt(7, rowY, label, colors.lightGray, rowBg)
         else
             writeAt(7, rowY, label, colors.white, rowBg)
         end
 
-        -- Delete button
         local delX = w - 5
         writeAt(delX, rowY, " Del ", colors.white, colors.red)
         registerHitbox(delX, delX + 4, rowY, rowY, function()
@@ -216,16 +211,14 @@ local function drawKeyboardPage()
     -- ── Input bar ────────────────────────────────────────────
     fill(1, 1, w, 2, colors.gray)
     writeAt(2, 1, "New task:", colors.orange, colors.gray)
+
     local displayInput = currentInput
-    -- Truncate display if too long
     if #displayInput > w - 6 then
         displayInput = ".." .. displayInput:sub(-(w - 8))
     end
     writeAt(2, 2, displayInput .. "_", colors.white, colors.gray)
 
-    -- ── Keyboard layout ───────────────────────────────────────
-    -- kw = key width (chars), kh = key height (rows)
-    -- Target: small, 1-row keys to fit compact monitors
+    -- ── Keyboard layout ──────────────────────────────────────
     local kw = 3
     local kh = 1
 
@@ -236,28 +229,22 @@ local function drawKeyboardPage()
         { "Z","X","C","V","B","N","M",",","."," " }
     }
 
-    -- Total keyboard width for centering
     local numCols = 10
-    local totalKbW = numCols * kw + (numCols - 1)  -- keys + gaps between
+    local totalKbW = numCols * kw + (numCols - 1)
     local kbStartX = math.floor((w - totalKbW) / 2) + 1
 
-    -- Leave bottom 2 rows for action buttons; place keys above that
     local actionRowY = h - 1
-    local kbStartY   = actionRowY - (#rows * (kh + 1)) -- keys + 1-row gap each
-
-    -- Clamp so it starts at minimum row 4
+    local kbStartY = actionRowY - (#rows * (kh + 1))
     if kbStartY < 4 then kbStartY = 4 end
 
     for rIdx, row in ipairs(rows) do
         local startX = kbStartX
-        local rowY   = kbStartY + (rIdx - 1) * (kh + 1)
+        local rowY = kbStartY + (rIdx - 1) * (kh + 1)
 
         for _, key in ipairs(row) do
             local label = key == " " and "SPC" or key
 
-            -- Key background
             fill(startX, rowY, kw, kh, colors.lightGray)
-            -- Centered label
             local lx = startX + math.floor((kw - #label) / 2)
             writeAt(lx, rowY, label, colors.white, colors.lightGray)
 
@@ -273,8 +260,7 @@ local function drawKeyboardPage()
         end
     end
 
-    -- ── Action buttons (bottom row) ───────────────────────────
-    -- [<-] Backspace | [CANCEL] | [ADD]
+    -- ── Action buttons ───────────────────────────────────────
     local bY = h
 
     -- Backspace
@@ -297,4 +283,46 @@ local function drawKeyboardPage()
     end)
 
     -- Add / Commit
-    local addLabel = "AD
+    local addLabel = "ADD"
+    local addX = w - #addLabel - 3
+    fill(addX - 1, bY, #addLabel + 2, 1, colors.lime)
+    writeAt(addX, bY, addLabel, colors.black, colors.lime)
+    registerHitbox(addX - 1, addX + #addLabel, bY, bY, function()
+        if currentInput ~= "" then
+            playTone(true)
+            table.insert(todoList, { text = currentInput, done = false })
+            saveTasks()
+            currentPage = "LIST"
+        end
+    end)
+end
+
+-- ==========================================
+-- RENDER
+-- ==========================================
+local function render()
+    if currentPage == "LIST" then
+        drawListPage()
+    else
+        drawKeyboardPage()
+    end
+end
+
+-- ==========================================
+-- INIT
+-- ==========================================
+loadTasks()
+render()
+
+while true do
+    local event, side, x, y = os.pullEvent("monitor_touch")
+    if side == peripheral.getName(mon) then
+        for _, box in ipairs(hitboxes) do
+            if x >= box.x1 and x <= box.x2 and y >= box.y1 and y <= box.y2 then
+                box.callback()
+                render()
+                break
+            end
+        end
+    end
+end
