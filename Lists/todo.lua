@@ -365,6 +365,55 @@ local function startAddMode()
 end
 
 -- ==========================================
+-- GUIDE PAGE
+-- ==========================================
+local function drawGuidePage()
+    mon.setBackgroundColor(colors.black)
+    mon.clear()
+    hitboxes = {}
+
+    local w, h = mon.getSize()
+
+    fill(1, 1, w, 2, colors.gray)
+    writeAt(2, 1, "GUIDE", colors.cyan, colors.gray)
+    writeAt(2, 2, "How to use the task tree", colors.yellow, colors.gray)
+
+    local backLabel = " BACK "
+    local backX = w - #backLabel - 1
+    writeAt(backX, 1, backLabel, colors.white, colors.red)
+    registerHitbox(backX, backX + #backLabel - 1, 1, 1, function()
+        playTone(true)
+        currentPage = "TREE"
+    end)
+
+    local lines = {
+        "1. Tap a task once to select it.",
+        "2. Tap the same task again to",
+        "   expand or collapse its subtasks.",
+        "3. Tap [ ] or [v] to mark a task",
+        "   and all its children done/undone.",
+        "4. Tap + Add to add under the",
+        "   selected task.",
+        "5. If nothing is selected, + Add",
+        "   creates a root task.",
+        "6. Tap Del to remove that branch.",
+        "7. GUIDE opens this help page."
+    }
+
+    local startY = 4
+    for i, line in ipairs(lines) do
+        local y = startY + i - 1
+        if y <= h then
+            writeAt(2, y, truncate(line, w - 3), colors.white, colors.black)
+        end
+    end
+
+    if h >= 15 then
+        writeAt(2, h - 1, "Tip: select a parent before adding.", colors.orange, colors.black)
+    end
+end
+
+-- ==========================================
 -- TREE VIEW
 -- ==========================================
 local function drawTreePage()
@@ -407,11 +456,19 @@ local function drawTreePage()
         local msg2 = "Tap '+ Add' to create a root task"
         writeAt(math.floor((w - #msg1) / 2) + 1, 7, msg1, colors.lightGray, colors.black)
         writeAt(math.floor((w - #msg2) / 2) + 1, 8, msg2, colors.gray, colors.black)
+
+        local guideLabel = " GUIDE "
+        writeAt(2, h, guideLabel, colors.black, colors.orange)
+        registerHitbox(2, 2 + #guideLabel - 1, h, h, function()
+            playTone(true)
+            currentPage = "GUIDE"
+        end)
         return
     end
 
     local listStartY = 5
-    local listH = h - listStartY
+    local footerReserved = 1
+    local listH = h - listStartY - footerReserved
     if listH < 1 then listH = 1 end
 
     local maxScroll = math.max(0, #rows - listH)
@@ -425,8 +482,8 @@ local function drawTreePage()
     end
 
     if scrollOffset < maxScroll then
-        writeAt(w, h, "v", colors.cyan, colors.black)
-        registerHitbox(w, w, h, h, function()
+        writeAt(w, h - 1, "v", colors.cyan, colors.black)
+        registerHitbox(w, w, h - 1, h - 1, function()
             scrollOffset = math.min(maxScroll, scrollOffset + 1)
         end)
     end
@@ -502,6 +559,13 @@ local function drawTreePage()
             end
         end)
     end
+
+    local guideLabel = " GUIDE "
+    writeAt(2, h, guideLabel, colors.black, colors.orange)
+    registerHitbox(2, 2 + #guideLabel - 1, h, h, function()
+        playTone(true)
+        currentPage = "GUIDE"
+    end)
 end
 
 -- ==========================================
@@ -619,6 +683,8 @@ end
 local function render()
     if currentPage == "TREE" then
         drawTreePage()
+    elseif currentPage == "GUIDE" then
+        drawGuidePage()
     else
         drawKeyboardPage()
     end
