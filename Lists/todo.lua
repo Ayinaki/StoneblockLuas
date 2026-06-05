@@ -10,11 +10,11 @@ mon.clear()
 -- HIGH-TECH INDUSTRIAL PALETTE
 -- ==========================================
 if mon.isColor() then
-    mon.setPaletteColor(colors.gray,      0x0F172A) -- Slate Dark Canvas (Deep Blue/Black)
-    mon.setPaletteColor(colors.lightGray, 0x1E293B) -- Subtle Panel Background Rows
-    mon.setPaletteColor(colors.cyan,      0x0EA5E9) -- Electric Blue Accent (Add Button)
-    mon.setPaletteColor(colors.lime,      0x10B981) -- Emerald Green (Done)
-    mon.setPaletteColor(colors.red,       0xF43F5E) -- Rose Crimson Red (Pending/Delete)
+    mon.setPaletteColor(colors.gray,      0x0F172A) -- Deep Charcoal Canvas
+    mon.setPaletteColor(colors.lightGray, 0x1E293B) -- Row Background Panel
+    mon.setPaletteColor(colors.cyan,      0x0EA5E9) -- Electric Blue Accent
+    mon.setPaletteColor(colors.lime,      0x10B981) -- Emerald Green
+    mon.setPaletteColor(colors.red,       0xF43F5E) -- Crimson Red
     mon.setPaletteColor(colors.orange,    0xF59E0B) -- Amber Accent
 end
 
@@ -37,10 +37,7 @@ end
 
 local function loadTasks()
     if not fs.exists(SAVE_FILE) then
-        todoList = {
-            { text = "Refill Soulsand input bin", done = false },
-            { text = "Expand Geologist chest space", done = true },
-        }
+        todoList = {} -- LAUNCHES COMPLETELY EMPTY BY DEFAULT
         return
     end
     todoList = {}
@@ -100,7 +97,7 @@ local function drawButton(x, y, width, height, text, mainColor, textColor)
 end
 
 -- ==========================================
--- REDESIGNED MAIN VIEW: TASK BOARD
+-- MAIN VIEW: FIXED TASK BOARD
 -- ==========================================
 local function drawListPage()
     mon.setBackgroundColor(colors.gray)
@@ -108,48 +105,55 @@ local function drawListPage()
     hitboxes = {}
     local w, h = mon.getSize()
 
-    -- Flat, Modern Header Accent Line
+    -- Header Panel
     fill(1, 1, w, 2, colors.lightGray)
     writeAt(2, 1, "FACTORY OPERATIONS PROTOCOL", colors.cyan, colors.lightGray)
     writeAt(2, 2, "ACTIVE DEVELOPMENT LOGS", colors.orange, colors.lightGray)
 
-    -- Sleek Premium [+ ADD] Toggle Box
-    local abw = 11
+    -- FIXED: Sized down Add Task Button to look normal next to titles
+    local abw = 10
     local abx = w - abw - 1
-    drawButton(abx, 1, abw, 2, "[+ TASK]", colors.cyan, colors.gray)
-    registerHitbox(abx, abx + abw - 1, 1, 2, function()
+    drawButton(abx, 1, abw, 1, "[+ TASK]", colors.cyan, colors.gray)
+    registerHitbox(abx, abx + abw - 1, 1, 1, function()
         playTone(true)
         currentInput = ""
         currentPage = "KEYBOARD"
     end)
+
+    -- Empty State Notice
+    if #todoList == 0 then
+        writeAt(math.floor((w - 18) / 2) + 1, 6, "NO ACTIVE PROTOCOLS", colors.lightGray, colors.gray)
+        writeAt(math.floor((w - 24) / 2) + 1, 7, "TAP [+ TASK] TO INITIALIZE", colors.gray, colors.gray)
+        return
+    end
 
     -- Item Rendering Loop
     local startY = 4
     for i, task in ipairs(todoList) do
         if startY + 2 > h then break end
 
-        -- Seamless row background panel
+        -- Row background panel
         fill(2, startY, w - 2, 2, colors.lightGray)
 
-        -- 1. Status Indicator Toggle Area
-        local statusText = task.done and " DONE " or " PNDG "
-        local statusBg   = task.done and colors.lime or colors.red
-        local statusFg   = task.done and colors.gray or colors.white
-        drawButton(3, startY, 8, 2, statusText, statusBg, statusFg)
+        -- FIXED: Restored classic Checkbox functionality combined with high-contrast text
+        local cbText = task.done and "[X] DONE" or "[ ] PNDG"
+        local cbColor = task.done and colors.lime or colors.red
+        local cbTextColor = task.done and colors.gray or colors.white
+        drawButton(3, startY, 10, 2, cbText, cbColor, cbTextColor)
         
         local idx = i
-        registerHitbox(3, 10, startY, startY + 1, function()
+        registerHitbox(3, 12, startY, startY + 1, function()
             playTone(false)
             todoList[idx].done = not todoList[idx].done
             saveTasks()
         end)
 
-        -- 2. Elegant Descriptive Text String
+        -- Elegant Task Label String Placement
         local textFg = task.done and colors.orange or colors.white
-        writeAt(13, startY, string.sub(task.text, 1, w - 23), textFg, colors.lightGray)
-        writeAt(13, startY + 1, "INDEX LOG #" .. string.format("%02d", i), colors.gray, colors.lightGray)
+        writeAt(15, startY, string.sub(task.text, 1, w - 25), textFg, colors.lightGray)
+        writeAt(15, startY + 1, "INDEX LOG #" .. string.format("%02d", i), colors.gray, colors.lightGray)
 
-        -- 3. Crimson Minimalist Delete Action Option
+        -- Action Delete Button
         local delX = w - 8
         drawButton(delX, startY, 7, 2, "CLEAR", colors.red, colors.white)
         registerHitbox(delX, delX + 6, startY, startY + 1, function()
@@ -171,7 +175,6 @@ local function drawKeyboardPage()
     hitboxes = {}
     local w, h = mon.getSize()
 
-    -- Live Input Terminal
     fill(1, 1, w, 2, colors.lightGray)
     writeAt(2, 1, "SYSTEM DIALOG INPUT REQUEST:", colors.orange, colors.lightGray)
     writeAt(2, 2, ">> " .. currentInput .. "_", colors.white, colors.lightGray)
@@ -198,7 +201,7 @@ local function drawKeyboardPage()
             local capturedKey = key
             registerHitbox(startX, startX + kw - 1, startY, startY + kh - 1, function()
                 playTone(false)
-                if #currentInput < w - 23 then
+                if #currentInput < w - 25 then
                     currentInput = currentInput .. capturedKey
                 end
             end)
@@ -223,7 +226,7 @@ local function drawKeyboardPage()
         currentPage = "LIST"
     end)
 
-    -- Save
+    -- Save/Commit
     local svX = w - 11
     drawButton(svX, btnY, 10, 2, "COMMIT", colors.lime, colors.gray)
     registerHitbox(svX, svX + 9, btnY, btnY + 1, function()
