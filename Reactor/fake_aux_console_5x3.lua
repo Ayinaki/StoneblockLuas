@@ -66,12 +66,12 @@ end
 
 local function box(x, y, ww, hh, title)
   if ww < 2 or hh < 2 then return end
-  writeAt(x, y, "+" .. string.rep(ww - 2 >= 0 and (ww - 2) or 0, "-") .. "+", FRAME, BG)
+  writeAt(x, y, "+" .. string.rep("-", ww - 2) .. "+", FRAME, BG)
   for yy = y + 1, y + hh - 2 do
     writeAt(x, yy, "|", FRAME, BG)
     writeAt(x + ww - 1, yy, "|", FRAME, BG)
   end
-  writeAt(x, y + hh - 1, "+" .. string.rep(ww - 2 >= 0 and (ww - 2) or 0, "-") .. "+", FRAME, BG)
+  writeAt(x, y + hh - 1, "+" .. string.rep("-", ww - 2) .. "+", FRAME, BG)
   if title then writeAt(x + 2, y, clip(title, ww - 4), TXT, BG) end
 end
 
@@ -163,12 +163,12 @@ local function drawConsole()
   end
 
   local lx = centerX + 3
-  smallLamp(lx,      14, CYAN,   true,              "BUS")
-  smallLamp(lx + 8,  14, GREEN,  tick % 2 == 0,     "AUX")
-  smallLamp(lx + 16, 14, YELLOW, true,              "VENT")
-  smallLamp(lx + 25, 14, RED,    tick % 4 == 0,     "TRIP")
-  smallLamp(lx + 3,  18, BLUE,   true,              "SYNC")
-  smallLamp(lx + 13, 18, MAG,    tick % 5 ~= 0,     "ISO")
+  smallLamp(lx,      14, CYAN,   true,          "BUS")
+  smallLamp(lx + 8,  14, GREEN,  tick % 2 == 0, "AUX")
+  smallLamp(lx + 16, 14, YELLOW, true,          "VENT")
+  smallLamp(lx + 25, 14, RED,    tick % 4 == 0, "TRIP")
+  smallLamp(lx + 3,  18, BLUE,   true,          "SYNC")
+  smallLamp(lx + 13, 18, MAG,    tick % 5 ~= 0, "ISO")
 
   writeAt(centerX + 3, 22, clip("BANK C / MATRIX", centerW - 4), DIM, BG)
 
