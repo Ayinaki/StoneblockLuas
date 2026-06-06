@@ -1,12 +1,13 @@
--- fake_aux_console_5x3_v2.lua
--- Decorative retro crowded reactor console for a 5x3 monitor
+-- aux_console_rotate_5x3.lua
+-- 5x3 retro control console + rotating standby screen
+-- switches views every 30 seconds
 
 local mon = peripheral.find("monitor") or term.current()
 if mon.setTextScale then mon.setTextScale(0.5) end
-term.redirect(mon)
 
-local w, h = term.getSize()
+local w, h
 local tick = 0
+local bootClock = os.clock()
 
 local BG = colors.black
 local FRAME = colors.gray
@@ -21,12 +22,16 @@ local BLUE = colors.lightBlue
 local MAG = colors.pink
 local WHITE = colors.white
 
+local function refreshSize()
+  w, h = mon.getSize()
+end
+
 local function fill(x, y, ww, hh, bg)
-  term.setBackgroundColor(bg)
+  mon.setBackgroundColor(bg)
   for yy = y, y + hh - 1 do
     if yy >= 1 and yy <= h then
-      term.setCursorPos(x, yy)
-      term.write(string.rep(" ", ww))
+      mon.setCursorPos(x, yy)
+      mon.write(string.rep(" ", math.max(0, math.min(ww, w - x + 1))))
     end
   end
 end
@@ -47,10 +52,10 @@ local function writeAt(x, y, t, fg, bg)
     x = 1
   end
   if #t <= 0 then return end
-  term.setCursorPos(x, y)
-  if fg then term.setTextColor(fg) end
-  if bg then term.setBackgroundColor(bg) end
-  term.write(t:sub(1, math.max(0, w - x + 1)))
+  mon.setCursorPos(x, y)
+  if fg then mon.setTextColor(fg) end
+  if bg then mon.setBackgroundColor(bg) end
+  mon.write(t:sub(1, math.max(0, w - x + 1)))
 end
 
 local function center(y, t, fg, bg)
@@ -61,7 +66,6 @@ end
 
 local function box(x, y, ww, hh, title)
   if ww < 2 or hh < 2 then return end
-  fill(x, y, ww, hh, BG)
   writeAt(x, y, "+" .. string.rep("-", ww - 2) .. "+", FRAME, BG)
   for yy = y + 1, y + hh - 2 do
     writeAt(x, yy, "|", FRAME, BG)
@@ -71,15 +75,29 @@ local function box(x, y, ww, hh, title)
   if title then writeAt(x + 2, y, clip(title, ww - 4), TXT, BG) end
 end
 
-local function smallLamp(x, y, col, on)
+local function meter(x, y, ww, label, value, col)
+  value = math.max(0, math.min(1, value))
+  box(x, y, ww, 6, label)
+  local inner = ww - 4
+  local needle = math.max(0, math.min(inner - 1, math.floor((inner - 1) * value)))
+  writeAt(x + 2, y + 2, string.rep("-", inner), DIM, BG)
+  writeAt(x + 2 + needle, y + 2, "^", col, BG)
+  writeAt(x + 2, y + 3, "0", DIM, BG)
+  writeAt(x + math.floor(ww / 2), y + 3, "5", DIM, BG)
+  writeAt(x + ww - 3, y + 3, "9", DIM, BG)
+  writeAt(x + 2, y + 4, clip("LOAD " .. tostring(math.floor(value * 100)) .. "%", ww - 4), TXT, BG)
+end
+
+local function smallLamp(x, y, col, on, label)
   writeAt(x, y, " ", colors.black, on and col or BG)
+  writeAt(x + 2, y, clip(label, 4), on and (label == "TRIP" and RED or TXT) or DIM, BG)
 end
 
 local function toggleRow(x, y, label, state, accent)
-  writeAt(x, y, clip(label, 10), DIM, BG)
-  writeAt(x + 11, y, "[", FRAME, BG)
-  writeAt(x + 12, y, state and "/" or "\\", state and accent or DIM, BG)
-  writeAt(x + 13, y, "]", FRAME, BG)
+  writeAt(x, y, clip(label, 8), DIM, BG)
+  writeAt(x + 9, y, "[", FRAME, BG)
+  writeAt(x + 10, y, state and "/" or "\\", state and accent or DIM, BG)
+  writeAt(x + 11, y, "]", FRAME, BG)
 end
 
 local function tinyButton(x, y, ww, label, bg, fg)
@@ -94,31 +112,30 @@ local function stripedBlock(x, y, ww, hh, label)
       writeAt(x + xx, y + yy, " ", nil, c)
     end
   end
-  center(y + math.floor(hh / 2), clip(label, ww), colors.black, nil)
+  local tx = x + math.max(0, math.floor((ww - #label) / 2))
+  local ty = y + math.floor(hh / 2)
+  writeAt(tx, ty, clip(label, ww), colors.black, nil)
 end
 
-local function meter(x, y, ww, label, value, col)
-  box(x, y, ww, 6, label)
-  local inner = ww - 4
-  local needle = math.max(0, math.min(inner - 1, math.floor((inner - 1) * value)))
-  writeAt(x + 2, y + 2, string.rep("-", inner), DIM, BG)
-  writeAt(x + 2 + needle, y + 2, "^", col, BG)
-  writeAt(x + 2, y + 3, "0", DIM, BG)
-  writeAt(x + math.floor(ww / 2), y + 3, "5", DIM, BG)
-  writeAt(x + ww - 3, y + 3, "9", DIM, BG)
-  writeAt(x + 2, y + 4, "LOAD " .. tostring(math.floor(value * 100)) .. "%", TXT, BG)
+local function fmtTime()
+  return textutils.formatTime(os.time(), false)
 end
 
-while true do
-  w, h = term.getSize()
-  tick = tick + 1
+local function uptimeText()
+  local s = math.floor(os.clock() - bootClock)
+  local hh = math.floor(s / 3600)
+  local mm = math.floor((s % 3600) / 60)
+  local ss = s % 60
+  return string.format("%02d:%02d:%02d", hh, mm, ss)
+end
 
-  term.setBackgroundColor(BG)
-  term.clear()
+local function drawConsole()
+  mon.setBackgroundColor(BG)
+  mon.clear()
 
   fill(1, 1, w, 3, FRAME)
   center(1, "AUXILIARY CONTROL CONSOLE / OVERRIDE DESK", TXT, FRAME)
-  writeAt(2, 2, clip("LOCAL BUS READY", 18), GREEN, FRAME)
+  writeAt(2, 2, clip("LOCAL BUS READY", 16), GREEN, FRAME)
   local hdr = "RM-B / AUX"
   writeAt(w - #hdr - 1, 2, hdr, TXT, FRAME)
 
@@ -126,66 +143,106 @@ while true do
   meter(2, 5, meterW, "REACT LOAD", (math.sin(tick * 0.12) + 1) / 2, CYAN)
   meter(meterW + 4, 5, meterW, "COOL FLOW", (math.cos(tick * 0.10) + 1) / 2, ORANGE)
 
-  local leftW = 22
-  local rightW = 22
+  local leftW = 20
+  local rightW = 20
   local centerX = leftW + 3
   local centerW = w - leftW - rightW - 4
 
-  box(2, 12, leftW, 12, "FIELD TOGGLES")
-  box(centerX, 12, centerW, 12, "STATUS LAMPS")
-  box(centerX + centerW + 1, 12, rightW, 12, "SAFETY SELECT")
+  box(2, 12, leftW, 12, "FIELD TOG")
+  box(centerX, 12, centerW, 12, "STATUS")
+  box(centerX + centerW + 1, 12, rightW, 12, "SAFETY")
 
-  local leftLabels = {
-    "AUX FEED","DAMPER","VENT ISO","PUMP BYP","PURGE","GRID TIE"
-  }
+  local leftLabels = {"AUX FEED","DAMPER","VENT ISO","PUMP BYP","PURGE","GRID TIE"}
   for i = 1, #leftLabels do
     toggleRow(4, 14 + (i - 1) * 2, leftLabels[i], ((tick + i) % 3 ~= 0), CYAN)
   end
 
-  local rightLabels = {
-    "ROD HOLD","SHIM EN","ALARM RST","TRIP ARM","SCRUB EN","MAG LOCK"
-  }
+  local rightLabels = {"ROD HOLD","SHIM EN","ALM RST","TRIP ARM","SCRUB EN","MAG LOCK"}
   for i = 1, #rightLabels do
     toggleRow(centerX + centerW + 3, 14 + (i - 1) * 2, rightLabels[i], ((tick + i) % 4 <= 1), ORANGE)
   end
 
   local lx = centerX + 3
-  local ly = 14
-  local lampCols = {CYAN, GREEN, YELLOW, RED, BLUE, MAG}
-  local lampNames = {"BUS","AUX","VENT","TRIP","SYNC","ISO"}
-  local idx = 1
-  for r = 0, 2 do
-    for c = 0, 3 do
-      if idx <= 6 then
-        local x = lx + c * 6
-        local y = ly + r * 3
-        smallLamp(x, y, lampCols[idx], ((tick + idx + r) % 3 ~= 0))
-        writeAt(x + 2, y, lampNames[idx], idx == 4 and RED or DIM, BG)
-        idx = idx + 1
-      end
-    end
-  end
+  smallLamp(lx,      14, CYAN,   true,              "BUS")
+  smallLamp(lx + 8,  14, GREEN,  tick % 2 == 0,     "AUX")
+  smallLamp(lx + 16, 14, YELLOW, true,              "VENT")
+  smallLamp(lx + 25, 14, RED,    tick % 4 == 0,     "TRIP")
+  smallLamp(lx + 3,  18, BLUE,   true,              "SYNC")
+  smallLamp(lx + 13, 18, MAG,    tick % 5 ~= 0,     "ISO")
 
-  writeAt(centerX + 3, 22, "LAMP BANK C / STATE MATRIX", DIM, BG)
+  writeAt(centerX + 3, 22, clip("BANK C / MATRIX", centerW - 4), DIM, BG)
 
   local lowerY = 25
   box(2, lowerY, w - 2, h - lowerY - 2, "MANUAL PANEL")
 
   local btnY = lowerY + 2
-  tinyButton(4, btnY, 12, "LAMP", BLUE, colors.black)
-  tinyButton(18, btnY, 12, "RESET", GREEN, colors.black)
+  tinyButton(4,  btnY, 12, "LAMP",  BLUE,   colors.black)
+  tinyButton(18, btnY, 12, "RESET", GREEN,  colors.black)
   tinyButton(32, btnY, 12, "FIELD", ORANGE, colors.black)
   tinyButton(46, btnY, 12, "BYPASS", WHITE, colors.black)
 
   stripedBlock(w - 19, lowerY + 2, 15, 4, "SCRAM")
 
   local btnY2 = lowerY + 7
-  tinyButton(4, btnY2, 10, "PURGE", YELLOW, colors.black)
-  tinyButton(16, btnY2, 10, "VENT", CYAN, colors.black)
-  tinyButton(28, btnY2, 10, "ACK", MAG, colors.black)
-  tinyButton(40, btnY2, 10, "TEST", DIM, colors.black)
+  tinyButton(4,  btnY2, 10, "PURGE", YELLOW, colors.black)
+  tinyButton(16, btnY2, 10, "VENT",  CYAN,   colors.black)
+  tinyButton(28, btnY2, 10, "ACK",   MAG,    colors.black)
+  tinyButton(40, btnY2, 10, "TEST",  DIM,    colors.black)
 
-  writeAt(4, h - 1, clip("NO FIELD LINK / DECORATIVE AUXILIARY CONSOLE", w - 8), DIM, BG)
+  writeAt(4, h - 1, clip("NO FIELD LINK / AUXILIARY CONSOLE", w - 8), DIM, BG)
+end
 
-  sleep(0.28)
+local function drawStandby()
+  mon.setBackgroundColor(BG)
+  mon.clear()
+
+  fill(1, 1, w, 3, FRAME)
+  center(1, "AUXILIARY CONSOLE / STATUS VIEW", TXT, FRAME)
+  writeAt(2, 2, clip("SYSTEM STABLE", 16), GREEN, FRAME)
+  local hdr = "AUTO CYCLE"
+  writeAt(w - #hdr - 1, 2, hdr, TXT, FRAME)
+
+  local t = fmtTime()
+  local day = "DAY " .. tostring(os.day())
+
+  box(3, 6, w - 4, 11, "STANDBY")
+  center(9, t, CYAN, BG)
+  center(11, day, DIM, BG)
+
+  local leftW = math.floor((w - 6) / 2)
+  local rightX = leftW + 4
+
+  box(2, 19, leftW, 10, "PLANT STATS")
+  writeAt(4, 21, "REACT " .. tostring(math.floor(((math.sin(tick * 0.08)+1)/2)*100)) .. "%", TXT, BG)
+  writeAt(4, 23, "COOL  " .. tostring(math.floor(((math.cos(tick * 0.06)+1)/2)*100)) .. "%", TXT, BG)
+  writeAt(4, 25, "VENT  " .. tostring(math.floor(((math.sin(tick * 0.05)+1)/2)*100)) .. "%", TXT, BG)
+  writeAt(4, 27, "UP    " .. uptimeText(), DIM, BG)
+
+  box(rightX, 19, w - rightX - 1, 10, "GRID STATE")
+  writeAt(rightX + 2, 21, "BUS A  READY", GREEN, BG)
+  writeAt(rightX + 2, 23, "BUS B  READY", GREEN, BG)
+  writeAt(rightX + 2, 25, "AUX C  STBY ", YELLOW, BG)
+  writeAt(rightX + 2, 27, "SYNC   LOCK ", CYAN, BG)
+
+  box(2, 31, w - 2, h - 32, "CHANNELS")
+  local baseX = 4
+  for i = 0, math.min(5, math.floor((w - 8) / 12)) do
+    local pct = math.floor(((math.sin(tick * 0.12 + i) + 1) / 2) * 100)
+    writeAt(baseX + i * 12, 33, "CH" .. tostring(i + 1), DIM, BG)
+    writeAt(baseX + i * 12, 34, tostring(pct) .. "%", TXT, BG)
+  end
+end
+
+while true do
+  refreshSize()
+  tick = tick + 1
+
+  local phase = math.floor((os.clock() - bootClock) / 30) % 2
+  if phase == 0 then
+    drawConsole()
+  else
+    drawStandby()
+  end
+
+  sleep(0.25)
 end
