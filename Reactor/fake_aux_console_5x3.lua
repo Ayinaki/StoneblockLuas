@@ -66,12 +66,12 @@ end
 
 local function box(x, y, ww, hh, title)
   if ww < 2 or hh < 2 then return end
-  writeAt(x, y, "+" .. string.rep("-", ww - 2) .. "+", FRAME, BG)
+  writeAt(x, y, "+" .. string.rep(ww - 2 >= 0 and (ww - 2) or 0, "-") .. "+", FRAME, BG)
   for yy = y + 1, y + hh - 2 do
     writeAt(x, yy, "|", FRAME, BG)
     writeAt(x + ww - 1, yy, "|", FRAME, BG)
   end
-  writeAt(x, y + hh - 1, "+" .. string.rep("-", ww - 2) .. "+", FRAME, BG)
+  writeAt(x, y + hh - 1, "+" .. string.rep(ww - 2 >= 0 and (ww - 2) or 0, "-") .. "+", FRAME, BG)
   if title then writeAt(x + 2, y, clip(title, ww - 4), TXT, BG) end
 end
 
@@ -152,12 +152,12 @@ local function drawConsole()
   box(centerX, 12, centerW, 12, "STATUS")
   box(centerX + centerW + 1, 12, rightW, 12, "SAFETY")
 
-  local leftLabels = {"AUX FEED","DAMPER","VENT ISO","PUMP BYP","PURGE","GRID TIE"}
+  local leftLabels = {"AUX FEED","DAMPER","VENT ISO","PUMP BYP","PURGE"}
   for i = 1, #leftLabels do
     toggleRow(4, 14 + (i - 1) * 2, leftLabels[i], ((tick + i) % 3 ~= 0), CYAN)
   end
 
-  local rightLabels = {"ROD HOLD","SHIM EN","ALM RST","TRIP ARM","SCRUB EN","MAG LOCK"}
+  local rightLabels = {"ROD HOLD","SHIM EN","ALM RST","TRIP ARM","SCRUB EN"}
   for i = 1, #rightLabels do
     toggleRow(centerX + centerW + 3, 14 + (i - 1) * 2, rightLabels[i], ((tick + i) % 4 <= 1), ORANGE)
   end
@@ -176,10 +176,10 @@ local function drawConsole()
   box(2, lowerY, w - 2, h - lowerY - 2, "MANUAL PANEL")
 
   local btnY = lowerY + 2
-  tinyButton(4,  btnY, 12, "LAMP",  BLUE,   colors.black)
-  tinyButton(18, btnY, 12, "RESET", GREEN,  colors.black)
-  tinyButton(32, btnY, 12, "FIELD", ORANGE, colors.black)
-  tinyButton(46, btnY, 12, "BYPASS", WHITE, colors.black)
+  tinyButton(4,  btnY, 12, "LAMP",   BLUE,   colors.black)
+  tinyButton(18, btnY, 12, "RESET",  GREEN,  colors.black)
+  tinyButton(32, btnY, 12, "FIELD",  ORANGE, colors.black)
+  tinyButton(46, btnY, 12, "BYPASS", WHITE,  colors.black)
 
   stripedBlock(w - 19, lowerY + 2, 15, 4, "SCRAM")
 
