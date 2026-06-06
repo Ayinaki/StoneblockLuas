@@ -1,6 +1,6 @@
--- status_pillar.lua
--- 1x3 placebo reactor status pillar
--- Read-only listener for existing reactor-modem.lua packets
+-- startup.lua
+-- 1x3 reactor status pillar
+-- Uses updated reactor bridge telemetry
 
 local MODEM_CHANNEL = 42
 local SCALE = 0.5
@@ -16,10 +16,10 @@ modem.open(MODEM_CHANNEL)
 local state = {
     active = false,
     brPct = 0,
+    actualBrPct = 0,
+    throughputPct = 0,
     fuelPct = 0,
     coolPct = 0,
-    wastePct = 0,
-    hotPct = 0,
     dmg = 0,
     temp = 0,
     heatRate = 0,
@@ -88,7 +88,7 @@ local function pctColor(v)
     return colors.lime
 end
 
-local function coolColor(v)
+local function reserveColor(v)
     v = clamp(toNum(v, 0), 0, 100)
     if v < 10 then return colors.red end
     if v < 25 then return colors.orange end
@@ -125,22 +125,23 @@ local function coreState()
     if state.temp >= 5000 or state.dmg >= 50 then
         return "EMRG", colors.red
     end
-    if state.coolPct < 20 or state.wastePct > 95 or state.hotPct > 95 or state.dmg > 20 then
+    if state.coolPct < 20 or state.fuelPct < 10 or state.throughputPct < 85 or state.dmg > 20 then
         return "WARN", colors.orange
     end
     return "ONLN", colors.lime
 end
 
-local function drawLamp(y, label, value, col)
+local function drawValue(y, label, valueText, col)
+    fill(2, y, W - 2, 2, colors.black)
+    writeAt(2, y, padRight(label, math.min(4, W - 2)), colors.lightGray, colors.black)
+    writeAt(2, y + 1, padRight(valueText, math.min(W - 2, 6)), col, colors.black)
+end
+
+local function drawLamp(y, label, on, col)
     fill(2, y, W - 2, 2, colors.black)
     writeAt(2, y, padRight(label, math.min(4, W - 2)), colors.lightGray, colors.black)
 
-    local lampChar = " "
-    local lampBg = colors.gray
-    if value then
-        lampBg = col
-    end
-
+    local lampBg = on and col or colors.gray
     if W >= 6 then
         writeAt(W - 3, y, "  ", colors.black, lampBg)
         writeAt(W - 3, y + 1, "  ", colors.black, lampBg)
@@ -150,34 +151,7 @@ local function drawLamp(y, label, value, col)
     end
 
     if W >= 5 then
-        writeAt(2, y + 1, padRight(value and "ON" or "OFF", math.min(4, W - 2)), col, colors.black)
-    end
-end
-
-local function drawValue(y, label, valueText, col)
-    fill(2, y, W - 2, 2, colors.black)
-    writeAt(2, y, padRight(label, math.min(4, W - 2)), colors.lightGray, colors.black)
-    writeAt(2, y + 1, padRight(valueText, math.min(W - 2, 6)), col, colors.black)
-end
-
-local function tinyBar(y, label, pct, col)
-    pct = clamp(toNum(pct, 0), 0, 100)
-    fill(2, y, W - 2, 2, colors.black)
-    writeAt(2, y, padRight(label, math.min(4, W - 2)), colors.lightGray, colors.black)
-
-    if W >= 8 then
-        local inner = W - 7
-        local fillCount = math.floor(inner * pct / 100)
-        writeAt(2, y + 1, "[", colors.gray, colors.black)
-        writeAt(3, y + 1, string.rep("-", inner), colors.gray, colors.black)
-        writeAt(3 + inner, y + 1, "]", colors.gray, colors.black)
-        if fillCount > 0 then
-            mon.setCursorPos(3, y + 1)
-            mon.setBackgroundColor(col)
-            mon.write(string.rep(" ", fillCount))
-        end
-    else
-        writeAt(2, y + 1, string.format("%3d", math.floor(pct + 0.5)), col, colors.black)
+        writeAt(2, y + 1, padRight(on and "ON" or "OFF", math.min(4, W - 2)), col, colors.black)
     end
 end
 
@@ -187,14 +161,14 @@ local function applyPacket(msg)
     if type(msg.data) ~= "table" then return end
 
     local d = msg.data
-    state.active   = d.active and true or false
-    state.brPct    = toNum(d.brPct, 0)
-    state.fuelPct  = toNum(d.fuelPct, 0)
-    state.coolPct  = toNum(d.coolPct, 0)
-    state.wastePct = toNum(d.wastePct, 0)
-    state.hotPct   = toNum(d.hotPct, 0)
-    state.dmg      = toNum(d.dmg, 0)
-    state.temp     = toNum(d.temp, 0)
+    state.active = d.active and true or false
+    state.brPct = toNum(d.brPct, 0)
+    state.actualBrPct = toNum(d.actualBrPct, state.brPct)
+    state.throughputPct = toNum(d.throughputPct, 0)
+    state.fuelPct = toNum(d.fuelPct, 0)
+    state.coolPct = toNum(d.coolPct, 0)
+    state.dmg = toNum(d.dmg, 0)
+    state.temp = toNum(d.temp, 0)
     state.heatRate = toNum(d.heatRate, 0)
     state.lastUpdate = os.clock()
 end
@@ -213,33 +187,15 @@ local function draw()
     writeAt(2, 3, padRight(linkTxt, math.min(4, W - 1)), linkCol, colors.gray)
 
     local y = 5
-
-    drawValue(y, "CORE", coreTxt, coreCol)
-    y = y + 3
-
-    drawValue(y, "LINK", linkTxt, linkCol)
-    y = y + 3
-
-    drawLamp(y, "PUMP", state.active, state.active and colors.cyan or colors.gray)
-    y = y + 3
-
-    drawValue(y, "TEMP", tostring(math.floor(state.temp + 0.5)), tempColor(state.temp))
-    y = y + 3
-
-    tinyBar(y, "COOL", state.coolPct, coolColor(state.coolPct))
-    y = y + 3
-
-    tinyBar(y, "WSTE", state.wastePct, pctColor(state.wastePct))
-    y = y + 3
-
-    tinyBar(y, "HOT ", state.hotPct, pctColor(state.hotPct))
-    y = y + 3
-
-    tinyBar(y, "BURN", state.brPct, pctColor(state.brPct))
-    y = y + 3
-
-    drawValue(y, "DMG", tostring(math.floor(state.dmg + 0.5)), pctColor(state.dmg))
-    y = y + 3
+    drawValue(y, "CORE", coreTxt, coreCol) ; y = y + 3
+    drawValue(y, "LINK", linkTxt, linkCol) ; y = y + 3
+    drawLamp(y, "PUMP", state.active, state.active and colors.cyan or colors.gray) ; y = y + 3
+    drawValue(y, "LOAD", tostring(math.floor(state.throughputPct + 0.5)), pctColor(state.throughputPct)) ; y = y + 3
+    drawValue(y, "FLOW", tostring(math.floor(state.heatRate + 0.5)), colors.lightBlue) ; y = y + 3
+    drawValue(y, "COOL", tostring(math.floor(state.coolPct + 0.5)), reserveColor(state.coolPct)) ; y = y + 3
+    drawValue(y, "FUEL", tostring(math.floor(state.fuelPct + 0.5)), reserveColor(state.fuelPct)) ; y = y + 3
+    drawValue(y, "TEMP", tostring(math.floor(state.temp + 0.5)), tempColor(state.temp)) ; y = y + 3
+    drawValue(y, "DMG", tostring(math.floor(state.dmg + 0.5)), pctColor(state.dmg)) ; y = y + 3
 
     if y <= H - 2 then
         local spin = ({"/","-","\\","|"})[(tick % 4) + 1]
