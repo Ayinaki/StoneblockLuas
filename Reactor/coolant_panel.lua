@@ -1,6 +1,6 @@
--- coolant_panel.lua
--- 3x3 placebo coolant routing panel
--- Read-only listener for existing reactor-modem.lua packets
+-- startup.lua
+-- 3x3 master reactor overview
+-- Uses updated reactor bridge telemetry
 
 local MODEM_CHANNEL = 42
 local SCALE = 0.5
@@ -15,28 +15,35 @@ modem.open(MODEM_CHANNEL)
 
 local state = {
     active = false,
-    brPct = 0,
-    fuelPct = 0,
-    coolPct = 0,
-    wastePct = 0,
-    hotPct = 0,
     dmg = 0,
     temp = 0,
     heatRate = 0,
+
+    br = 0,
+    brMax = 0,
+    brPct = 0,
+
+    actualBr = 0,
+    actualBrPct = 0,
+    throughputPct = 0,
+
+    fuelPct = 0,
+    coolPct = 0,
+
     lastUpdate = 0,
 }
 
 local tick = 0
 
-local function clamp(v, a, b)
-    if v < a then return a end
-    if v > b then return b end
-    return v
-end
-
 local function toNum(v, d)
     v = tonumber(v)
     if v == nil then return d or 0 end
+    return v
+end
+
+local function clamp(v, lo, hi)
+    if v < lo then return lo end
+    if v > hi then return hi end
     return v
 end
 
@@ -47,16 +54,11 @@ local function writeAt(x, y, text, fg, bg)
         text = text:sub(2 - x)
         x = 1
     end
-    if #text == 0 then return end
+    if #text <= 0 then return end
     mon.setCursorPos(x, y)
     mon.setTextColor(fg or colors.white)
     mon.setBackgroundColor(bg or colors.black)
     mon.write(text:sub(1, W - x + 1))
-end
-
-local function center(y, text, fg, bg)
-    local x = math.max(1, math.floor((W - #text) / 2) + 1)
-    writeAt(x, y, text, fg, bg)
 end
 
 local function fill(x, y, w, h, bg)
@@ -72,70 +74,98 @@ local function fill(x, y, w, h, bg)
     end
 end
 
-local function box(x, y, w, h, fg, bg, title)
-    if w < 2 or h < 2 then return end
-    local top = "+" .. string.rep("-", w - 2) .. "+"
-    local mid = "|" .. string.rep(" ", w - 2) .. "|"
-    writeAt(x, y, top, fg, bg)
-    for yy = y + 1, y + h - 2 do
-        writeAt(x, yy, mid, fg, bg)
-    end
-    writeAt(x, y + h - 1, top, fg, bg)
-    if title and #title < w - 3 then
-        writeAt(x + 2, y, title, fg, bg)
-    end
+local function center(y, text, fg, bg)
+    local x = math.max(1, math.floor((W - #text) / 2) + 1)
+    writeAt(x, y, text, fg, bg)
 end
 
-local function statusInfo()
-    if state.temp >= 5000 or state.dmg >= 50 then
-        return colors.pink, "EMERG"
-    elseif state.active then
-        if state.coolPct < 20 or state.wastePct > 99 or state.hotPct > 99 or state.dmg > 20 then
-            return colors.orange, "WARN "
-        end
-        return colors.lime, "FLOW "
+local function trim(text, w)
+    text = tostring(text or "")
+    if #text <= w then return text end
+    if w <= 1 then return text:sub(1, w) end
+    return text:sub(1, w - 1) .. ">"
+end
+
+local function pctColor(v)
+    v = clamp(toNum(v, 0), 0, 100)
+    if v >= 95 then return colors.red end
+    if v >= 80 then return colors.orange end
+    if v >= 50 then return colors.yellow end
+    return colors.lime
+end
+
+local function reserveColor(v)
+    v = clamp(toNum(v, 0), 0, 100)
+    if v < 10 then return colors.red end
+    if v < 25 then return colors.orange end
+    if v < 50 then return colors.yellow end
+    return colors.lime
+end
+
+local function tempColor(v)
+    v = toNum(v, 0)
+    if v >= 5000 then return colors.red end
+    if v >= 3500 then return colors.orange end
+    if v >= 2000 then return colors.yellow end
+    return colors.lime
+end
+
+local function linkState()
+    local age = os.clock() - state.lastUpdate
+    if age < 2 then
+        return "LIVE", colors.lime
+    elseif age < 8 then
+        return "STAL", colors.orange
     else
-        return colors.red, "IDLE "
+        return "DOWN", colors.red
     end
 end
 
-local function pulse(seed, speed)
-    return math.floor(((math.sin((tick + seed) / speed) + 1) / 2) * 100)
+local function coreState()
+    if os.clock() - state.lastUpdate > 8 then
+        return "LINK LOST", colors.red
+    end
+    if not state.active then
+        return "STANDBY", colors.lightGray
+    end
+    if state.temp >= 5000 or state.dmg >= 50 then
+        return "CRITICAL", colors.red
+    end
+    if state.coolPct < 20 or state.fuelPct < 10 or state.throughputPct < 85 or state.dmg > 20 then
+        return "WARNING", colors.orange
+    end
+    return "ONLINE", colors.lime
 end
 
-local function pipeH(x1, x2, y, col, active)
-    if x2 < x1 then x1, x2 = x2, x1 end
-    for x = x1, x2 do
-        local ch = "="
-        if active and ((x + tick) % 6 == 0) then ch = ">" end
-        writeAt(x, y, ch, col, colors.black)
+local function box(x, y, w, h, title, titleCol)
+    if w < 4 or h < 3 then return end
+
+    writeAt(x, y, "+" .. string.rep("-", w - 2) .. "+", colors.gray, colors.black)
+    for yy = y + 1, y + h - 2 do
+        writeAt(x, yy, "|", colors.gray, colors.black)
+        fill(x + 1, yy, w - 2, 1, colors.black)
+        writeAt(x + w - 1, yy, "|", colors.gray, colors.black)
+    end
+    writeAt(x, y + h - 1, "+" .. string.rep("-", w - 2) .. "+", colors.gray, colors.black)
+
+    if title and w > 4 then
+        writeAt(x + 2, y, trim(title, w - 4), titleCol or colors.white, colors.black)
     end
 end
 
-local function pipeV(x, y1, y2, col, active)
-    if y2 < y1 then y1, y2 = y2, y1 end
-    for y = y1, y2 do
-        local ch = "|"
-        if active and ((y + tick) % 5 == 0) then ch = "v" end
-        writeAt(x, y, ch, col, colors.black)
-    end
-end
-
-local function bar(x, y, w, label, pct, col)
+local function bar(x, y, w, pct, col)
     pct = clamp(toNum(pct, 0), 0, 100)
-    local inner = math.max(1, w - 10)
-    local fillCount = math.floor(inner * pct / 100)
+    if w < 3 then return end
 
-    writeAt(x, y, string.format("%-7s[", label), colors.lightGray, colors.black)
-    writeAt(x + 8, y, string.rep("-", inner) .. "]", colors.gray, colors.black)
+    writeAt(x, y, "[" .. string.rep("-", w - 2) .. "]", colors.gray, colors.black)
+    local inner = w - 2
+    local fillCount = math.floor(inner * pct / 100 + 0.5)
 
     if fillCount > 0 then
-        mon.setCursorPos(x + 8, y)
+        mon.setCursorPos(x + 1, y)
         mon.setBackgroundColor(col)
         mon.write(string.rep(" ", fillCount))
     end
-
-    writeAt(x + 9 + inner, y, string.format("%3d%%", math.floor(pct + 0.5)), colors.white, colors.black)
 end
 
 local function applyPacket(msg)
@@ -144,134 +174,127 @@ local function applyPacket(msg)
     if type(msg.data) ~= "table" then return end
 
     local d = msg.data
-    state.active   = d.active and true or false
-    state.brPct    = toNum(d.brPct, 0)
-    state.fuelPct  = toNum(d.fuelPct, 0)
-    state.coolPct  = toNum(d.coolPct, 0)
-    state.wastePct = toNum(d.wastePct, 0)
-    state.hotPct   = toNum(d.hotPct, 0)
-    state.dmg      = toNum(d.dmg, 0)
-    state.temp     = toNum(d.temp, 0)
+
+    state.active = d.active and true or false
+    state.dmg = toNum(d.dmg, 0)
+    state.temp = toNum(d.temp, 0)
     state.heatRate = toNum(d.heatRate, 0)
+
+    state.br = toNum(d.br, 0)
+    state.brMax = toNum(d.brMax, 0)
+    state.brPct = toNum(d.brPct, 0)
+
+    state.actualBr = toNum(d.actualBr, state.br)
+    state.actualBrPct = toNum(d.actualBrPct, state.brPct)
+
+    if d.throughputPct ~= nil then
+        state.throughputPct = toNum(d.throughputPct, 0)
+    else
+        if state.br > 0 then
+            state.throughputPct = clamp((state.actualBr / state.br) * 100, 0, 100)
+        else
+            state.throughputPct = 0
+        end
+    end
+
+    state.fuelPct = toNum(d.fuelPct, 0)
+    state.coolPct = toNum(d.coolPct, 0)
+
     state.lastUpdate = os.clock()
 end
 
 local function drawHeader()
-    local col, label = statusInfo()
     fill(1, 1, W, 3, colors.gray)
-    center(1, "PRIMARY COOLANT ROUTING", colors.white, colors.gray)
-    center(2, "REACTOR LOOP A / PLACEBO PANEL", colors.lightGray, colors.gray)
+    center(1, "MASTER REACTOR OVERVIEW", colors.white, colors.gray)
 
-    writeAt(2, 3, "STATE: " .. label, col, colors.gray)
+    local linkTxt, linkCol = linkState()
+    writeAt(2, 2, "LINK " .. linkTxt, linkCol, colors.gray)
 
-    local age = os.clock() - state.lastUpdate
-    local linkText, linkColor = "NO FEED", colors.red
-    if age < 2 then
-        linkText, linkColor = "FEED OK", colors.lime
-    elseif age < 8 then
-        linkText, linkColor = "STALE", colors.orange
-    end
-    writeAt(W - 11, 3, linkText, linkColor, colors.gray)
+    local spin = ({"/","-","\\","|"})[(tick % 4) + 1]
+    local mode = state.active and "RUN" or "SBY"
+    local right = mode .. " " .. spin
+    writeAt(W - #right, 2, right, state.active and colors.lime or colors.lightGray, colors.gray)
 end
 
-local function drawCore()
-    local top = 5
-    local bottom = H - 7
-    if bottom < top + 8 then return end
+local function drawTopRow()
+    local y = 5
+    local gap = 1
+    local boxW = math.floor((W - 4) / 3)
+    local x1 = 2
+    local x2 = x1 + boxW + gap
+    local x3 = x2 + boxW + gap
 
-    local coreW, coreH = 18, 7
-    local coreX = math.floor((W - coreW) / 2)
-    local coreY = top + 4
+    box(x1, y, boxW, 7, "SET BURN", colors.orange)
+    writeAt(x1 + 2, y + 2, trim(string.format("%.2f mB/t", state.br), boxW - 4), pctColor(state.brPct), colors.black)
+    writeAt(x1 + 2, y + 3, trim("MAX " .. math.floor(state.brMax + 0.5), boxW - 4), colors.white, colors.black)
+    bar(x1 + 2, y + 5, boxW - 4, state.brPct, pctColor(state.brPct))
 
-    local pipeCol = colors.gray
-    if state.active then pipeCol = colors.cyan end
-    if state.coolPct < 20 or state.dmg > 20 then pipeCol = colors.orange end
-    if state.temp >= 5000 or state.dmg >= 50 then pipeCol = colors.red end
+    box(x2, y, boxW, 7, "ACT BURN", colors.yellow)
+    writeAt(x2 + 2, y + 2, trim(string.format("%.2f mB/t", state.actualBr), boxW - 4), pctColor(state.actualBrPct), colors.black)
+    writeAt(x2 + 2, y + 3, trim("MAX " .. math.floor(state.actualBrPct + 0.5) .. "%", boxW - 4), colors.white, colors.black)
+    bar(x2 + 2, y + 5, boxW - 4, state.actualBrPct, pctColor(state.actualBrPct))
 
-    local coreCol = colors.gray
-    if state.active then coreCol = colors.lime end
-    if state.dmg > 20 then coreCol = colors.orange end
-    if state.temp >= 5000 or state.dmg >= 50 then coreCol = colors.red end
+    box(x3, y, boxW, 7, "THROUGHPUT", colors.red)
+    writeAt(x3 + 2, y + 2, trim(math.floor(state.throughputPct + 0.5) .. "%", boxW - 4), pctColor(state.throughputPct), colors.black)
+    writeAt(x3 + 2, y + 3, trim("SET MATCH", boxW - 4), colors.white, colors.black)
+    bar(x3 + 2, y + 5, boxW - 4, state.throughputPct, pctColor(state.throughputPct))
+end
 
-    box(coreX, coreY, coreW, coreH, colors.lightBlue, colors.black, "CORE")
-    fill(coreX + 5, coreY + 2, coreW - 10, coreH - 4, coreCol)
+local function drawMiddle()
+    local y = 13
 
-    if state.active then
-        center(coreY + 3, "ACTIVE", colors.black, coreCol)
-    else
-        center(coreY + 3, "STANDBY", colors.black, coreCol)
-    end
+    local leftW = math.floor(W * 0.3)
+    local centerW = math.floor(W * 0.36)
+    local rightW = W - leftW - centerW - 4
 
-    box(3, coreY + 1, 10, 5, colors.cyan, colors.black, "PUMP-A")
-    box(W - 12, coreY + 1, 10, 5, colors.cyan, colors.black, "PUMP-B")
-    box(coreX - 4, top, 12, 4, colors.lightGray, colors.black, "INLET")
-    box(coreX + coreW - 7, bottom - 2, 12, 4, colors.lightGray, colors.black, "OUTLET")
+    local x1 = 2
+    local x2 = x1 + leftW + 1
+    local x3 = x2 + centerW + 1
 
-    local cy = coreY + 3
-    pipeH(13, coreX - 1, cy, pipeCol, state.active)
-    pipeH(coreX + coreW, W - 13, cy, pipeCol, state.active)
-    pipeV(coreX + math.floor(coreW / 2), top + 3, coreY - 1, pipeCol, state.active)
-    pipeV(coreX + math.floor(coreW / 2), coreY + coreH, bottom - 1, pipeCol, state.active)
+    box(x1, y, leftW, 8, "FLOW", colors.cyan)
+    writeAt(x1 + 2, y + 2, trim("HEAT RATE", leftW - 4), colors.lightBlue, colors.black)
+    writeAt(x1 + 2, y + 3, trim(tostring(math.floor(state.heatRate + 0.5)), leftW - 4), colors.lightBlue, colors.black)
+    writeAt(x1 + 2, y + 5, trim("TMP " .. math.floor(state.temp + 0.5), leftW - 4), tempColor(state.temp), colors.black)
+    writeAt(x1 + 2, y + 6, trim("DMG " .. math.floor(state.dmg + 0.5) .. "%", leftW - 4), pctColor(state.dmg), colors.black)
 
-    local p1, p2
-    if state.active then
-        p1 = clamp(math.max(state.coolPct, pulse(0, 6)), 0, 100)
-        p2 = clamp(math.max(state.coolPct - 2, pulse(8, 7)), 0, 100)
-    else
-        p1 = math.floor(pulse(0, 11) / 6)
-        p2 = math.floor(pulse(8, 12) / 6)
-    end
+    box(x2, y, centerW, 8, "CORE STATUS", colors.cyan)
+    local label, col = coreState()
+    center(y + 2, trim(label, centerW - 4), col, colors.black)
+    center(y + 4, trim("TEMP " .. math.floor(state.temp + 0.5), centerW - 4), tempColor(state.temp), colors.black)
+    center(y + 5, trim("LOAD " .. math.floor(state.throughputPct + 0.5) .. "%", centerW - 4), pctColor(state.throughputPct), colors.black)
 
-    writeAt(4, coreY + 3, state.active and "ON " or "SBY", state.active and colors.lime or colors.gray)
-    writeAt(W - 10, coreY + 3, state.active and "ON " or "SBY", state.active and colors.lime or colors.gray)
-
-    writeAt(3, coreY + 7, string.format("P-A FLOW  %3d%%", p1), colors.white, colors.black)
-    writeAt(W - 16, coreY + 7, string.format("P-B FLOW  %3d%%", p2), colors.white, colors.black)
-
-    local inletPct = state.active and clamp(math.floor(state.coolPct * 0.9 + state.brPct * 0.1), 0, 100) or 0
-    local outletPct = state.active and clamp(math.floor(100 - state.wastePct * 0.6), 0, 100) or 0
-
-    writeAt(coreX - 1, top + 4, string.format("IN %3d%%", inletPct), colors.cyan, colors.black)
-    writeAt(coreX, bottom, string.format("OUT %3d%%", outletPct), colors.lightBlue, colors.black)
+    box(x3, y, rightW, 8, "RESERVES", colors.cyan)
+    writeAt(x3 + 2, y + 2, trim("COOL " .. math.floor(state.coolPct + 0.5) .. "%", rightW - 4), reserveColor(state.coolPct), colors.black)
+    writeAt(x3 + 2, y + 3, trim("FUEL " .. math.floor(state.fuelPct + 0.5) .. "%", rightW - 4), reserveColor(state.fuelPct), colors.black)
+    bar(x3 + 2, y + 5, rightW - 4, state.coolPct, reserveColor(state.coolPct))
+    bar(x3 + 2, y + 6, rightW - 4, state.fuelPct, reserveColor(state.fuelPct))
 end
 
 local function drawFooter()
-    local y = H - 5
-    if y < 1 then return end
-    fill(1, y, W, 6, colors.black)
+    local y = H - 4
+    box(2, y, W - 2, 4, "STATUS LINE", colors.gray)
 
-    bar(2, y, math.max(18, math.floor(W * 0.48)), "COOL", state.coolPct, colors.cyan)
-    bar(math.floor(W * 0.52), y, math.max(18, W - math.floor(W * 0.52) - 1), "WASTE", state.wastePct, colors.brown)
+    local line1 = "BURN " .. string.format("%.2f", state.br) .. " / ACT " .. string.format("%.2f", state.actualBr)
+    local line2 = "THR " .. math.floor(state.throughputPct + 0.5) .. "% | COOL " .. math.floor(state.coolPct + 0.5) .. "% | FUEL " .. math.floor(state.fuelPct + 0.5) .. "%"
 
-    local heatPct = clamp(math.floor((state.temp / 5000) * 100), 0, 100)
-    bar(2, y + 2, math.max(18, math.floor(W * 0.48)), "TEMP", heatPct, colors.orange)
-    bar(math.floor(W * 0.52), y + 2, math.max(18, W - math.floor(W * 0.52) - 1), "HOT", state.hotPct, colors.red)
-
-    local line = string.format(
-        "BURN:%3d%%  FUEL:%3d%%  DMG:%3d%%  T:%4d",
-        math.floor(state.brPct + 0.5),
-        math.floor(state.fuelPct + 0.5),
-        math.floor(state.dmg + 0.5),
-        math.floor(state.temp + 0.5)
-    )
-    writeAt(2, H, line, colors.lightGray, colors.black)
-
-    local spinner = ({"/","-","\\","|"})[(tick % 4) + 1]
-    writeAt(W - 11, H, "FLOW " .. spinner, colors.cyan, colors.black)
+    writeAt(4, y + 1, trim(line1, W - 6), colors.white, colors.black)
+    writeAt(4, y + 2, trim(line2, W - 6), colors.lightGray, colors.black)
 end
 
 local function draw()
     mon.setBackgroundColor(colors.black)
     mon.clear()
+
     drawHeader()
-    drawCore()
+    drawTopRow()
+    drawMiddle()
     drawFooter()
 end
 
 while true do
     tick = tick + 1
 
-    local timer = os.startTimer(0.1)
+    local timer = os.startTimer(0.15)
     while true do
         local ev, a, b, c, d, e = os.pullEvent()
         if ev == "modem_message" then
