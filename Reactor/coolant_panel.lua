@@ -218,8 +218,8 @@ local function drawCore()
         p1 = clamp(math.max(state.coolPct, pulse(0, 6)), 0, 100)
         p2 = clamp(math.max(state.coolPct - 2, pulse(8, 7)), 0, 100)
     else
-        p1 = pulse(0, 11) // 6
-        p2 = pulse(8, 12) // 6
+        p1 = math.floor(pulse(0, 11) / 6)
+        p2 = math.floor(pulse(8, 12) / 6)
     end
 
     writeAt(4, coreY + 3, state.active and "ON " or "SBY", state.active and colors.lime or colors.gray)
